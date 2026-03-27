@@ -202,32 +202,42 @@ export default function PlayRoom() {
       return;
     }
 
-    const aliveCount = activePlayers.filter(p => !p.is_eliminated).length;
+    const alivePlayersList = activePlayers.filter(p => !p.is_eliminated);
+    const aliveCount = alivePlayersList.length;
     if (aliveCount === 0) return;
 
-    if (aliveCount < 3 && !isAbortingRef.current) {
-      isAbortingRef.current = true; // prevent repeated firing
+    if (!isAbortingRef.current) {
+      const impostorsAlive = alivePlayersList.filter(p => p.role === 'IMPOSTOR').length;
+      const nativesAlive = aliveCount - impostorsAlive;
 
-      if (isTeacher) {
-        console.warn('📝 DB WRITE - Cambiando game_state:', { nuevaFase: 'LOBBY', disparadoPor: 'AbortWatcher (Línea 249)' });
-        console.warn(`[ABORT] Active phase with ${aliveCount} players — forcing LOBBY (single-shot).`);
-        supabase.from('game_state').update({
-          phase: 'LOBBY',
-          current_turn_index: 0,
-          current_turn_player_id: null,
-          turn_started_at: null,
-          is_paused: false,
-          secret_word: null
-        }).eq('room_id', room.id).then(({ error }) => {
-          if (error) console.error('❌ ERROR AL ABORTAR A LOBBY:', error);
-          else console.log('✅ ABORTO A LOBBY EJECUTADO CORRECTAMENTE');
-        });
+      // 1. Check Win Conditions first to avoid aborting a legitimate win
+      if (impostorsAlive === 0 || nativesAlive <= impostorsAlive) {
+        isAbortingRef.current = true;
+        if (isTeacher) {
+          console.warn('📝 DB WRITE - Cambiando game_state a RESULTS (Victoria detectada globalmente)');
+          supabase.from('game_state').update({ phase: 'RESULTS' }).eq('room_id', room.id);
+        }
+        return;
+      }
 
-        activePlayers.forEach(p =>
-          supabase.from('players').update({ is_eliminated: false, turn_order: null }).eq('id', p.id).then(({ error }) => {
-            if (error) console.error(`❌ ERROR AL RESETEAR JUGADOR ${p.id}:`, error);
-          })
-        );
+      // 2. Abort to LOBBY rule: if alive players drop < 3 and NO ONE WON, abort.
+      if (aliveCount < 3) {
+        isAbortingRef.current = true;
+        if (isTeacher) {
+          console.warn('📝 DB WRITE - Cambiando game_state a LOBBY (Abortando por falta de jugadores vivos)');
+          supabase.from('game_state').update({
+            phase: 'LOBBY',
+            current_turn_index: 0,
+            current_turn_player_id: null,
+            turn_started_at: null,
+            is_paused: false,
+            secret_word: null
+          }).eq('room_id', room.id);
+
+          activePlayers.forEach(p =>
+            supabase.from('players').update({ is_eliminated: false, turn_order: null }).eq('id', p.id)
+          );
+        }
       }
     }
   }, [activePlayers.length, gameState?.phase, isTeacher, room?.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -440,7 +450,7 @@ export default function PlayRoom() {
 
 // ---------------- LOBBY PHASE ----------------
 function PhaseLobby({ isTeacher, roomId, players, roomLevel }: { isTeacher: boolean, roomId: string, players: any[], roomLevel: string }) {
-  useGame(); // Keep hook call alive for context subscription
+  const { refreshPlayers } = useGame(); // Keep hook call alive for context subscription
   const [startError, setStartError] = useState<string | null>(null);
 
   // ── canStart: disabled if < 3 players ──
@@ -587,8 +597,19 @@ function PhaseLobby({ isTeacher, roomId, players, roomLevel }: { isTeacher: bool
                     e.stopPropagation();
                     if (!p.id) { console.error('KICK ERROR: player id is undefined', p); return; }
                     console.log('🛑 KICK INTENT:', p.id);
-                    const { error } = await supabase.from('players').delete().eq('id', p.id);
-                    if (error) console.error('❌ FALLO KICK:', error);
+                    await supabase.from('players').delete().eq('id', p.id);
+
+                    // Send explicit broadcast to stop auto-rejoin
+                    const ch = supabase.channel(`kick:${p.id}:${Date.now()}`);
+                    ch.subscribe((status) => {
+                      if (status === 'SUBSCRIBED') {
+                        ch.send({ type: 'broadcast', event: 'KICK_ABS', payload: { target: p.id } })
+                          .then(() => {
+                            supabase.removeChannel(ch);
+                            refreshPlayers(); // Update Admin UI immediately
+                          });
+                      }
+                    });
                   }}
                   className="relative z-[9999] pointer-events-auto text-whapigen-red/40 hover:text-white hover:bg-whapigen-red w-8 h-8 rounded-full flex items-center justify-center transition-all ml-4 border border-whapigen-red/20 shadow-inner group-hover:text-whapigen-red group-hover:scale-110 shadow-neon-pulse-red cursor-pointer"
                   title="Kick Player"
@@ -857,6 +878,7 @@ function PhaseReveal({ isTeacher, roomId, players }: { isTeacher: boolean, roomI
 // ---------------- SPEAKING TURNS PHASE ----------------
 function PhaseSpeaking({ isTeacher, room, gameState, players }: { isTeacher: boolean, room: any, gameState: any, players: any[] }) {
   const { studentData } = useAuth();
+  const { refreshPlayers } = useGame();
   const circleRef = useRef(null);
   const tlRef = useRef<gsap.core.Tween | null>(null);
   const currentPlayer = players.find((p: any) => p.id === gameState.current_turn_player_id);
@@ -1069,8 +1091,19 @@ function PhaseSpeaking({ isTeacher, room, gameState, players }: { isTeacher: boo
                       e.stopPropagation();
                       if (!p.id) { console.error('KICK ERROR: player id is undefined', p); return; }
                       console.log('🛑 KICK INTENT:', p.id);
-                      const { error } = await supabase.from('players').delete().eq('id', p.id);
-                      if (error) console.error('❌ FALLO KICK:', error);
+                      await supabase.from('players').delete().eq('id', p.id);
+
+                      // Send explicit broadcast to stop auto-rejoin
+                      const ch = supabase.channel(`kick:${p.id}:${Date.now()}`);
+                      ch.subscribe((status) => {
+                        if (status === 'SUBSCRIBED') {
+                          ch.send({ type: 'broadcast', event: 'KICK_ABS', payload: { target: p.id } })
+                            .then(() => {
+                              supabase.removeChannel(ch);
+                              refreshPlayers(); // Update Admin UI immediately
+                            });
+                        }
+                      });
                     }}
                     className="relative z-[9999] pointer-events-auto cursor-pointer text-whapigen-red/30 hover:text-whapigen-red hover:scale-125 transition-all ml-2 p-1 bg-white/5 rounded-full border border-white/5 shadow-neon-pulse-red"
                     title="Kick Player"
@@ -1091,6 +1124,7 @@ function PhaseSpeaking({ isTeacher, room, gameState, players }: { isTeacher: boo
 // ---------------- VOTING PHASE ----------------
 function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeacher: boolean, roomId: string, players: any[], gameState: any, room: any }) {
   const { studentData } = useAuth();
+  const { refreshPlayers } = useGame();
   const [votes, setVotes] = useState<any[]>([]);
   const alivePlayers = players.filter((p: any) => !p.is_eliminated && !p.is_host);
   const currentUser = players.find((p: any) => p.id === studentData?.playerId);
@@ -1133,7 +1167,7 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
     // Polling fallback mechanism
     const fetchVotesFallback = setInterval(() => {
       fetchVotes();
-    }, 5000);
+    }, 2500);
 
     return () => {
       clearTimeout(timer);
@@ -1278,9 +1312,10 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
 
   // Separated: the actual elimination + round transition logic
   const processRoundEnd = async (eliminatedId: string | null) => {
-    // Si hay eliminado, se procesa el puntaje y se marca
+    // TAREA 1: SOLO ese jugador sea marcado como is_eliminated
     if (eliminatedId) {
       await supabase.from('players').update({ is_eliminated: true }).eq('id', eliminatedId);
+      refreshPlayers(); // TAREA 3: UI Sync Inmediata
 
       const eliminatedPlayer = alivePlayers.find((p: any) => p.id === eliminatedId);
       if (eliminatedPlayer?.role === 'IMPOSTOR') {
@@ -1296,7 +1331,7 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
       }
     }
 
-    // Recalcular vivos localmente
+    // TAREA 2: Lógica de Victoria (Delegada a global o manejada acá si sobrevive)
     const newAlive = eliminatedId ? alivePlayers.filter((p: any) => p.id !== eliminatedId) : alivePlayers;
 
     const impostorsAlive = newAlive.filter((p: any) => p.role === 'IMPOSTOR').length;
@@ -1314,7 +1349,7 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
       console.warn('📝 DB WRITE - Cambiando game_state:', { nuevaFase: 'RESULTS', disparadoPor: 'processRoundEnd (Supervivencia)' });
       await supabase.from('game_state').update({ phase: 'RESULTS' }).eq('room_id', roomId);
     } else {
-      // Standby Intermedio
+      // Standby Intermedio (Nadie gana aún, a la siguiente ronda)
       await supabase.from('votes').delete().eq('room_id', roomId);
       console.warn('📝 DB WRITE - Cambiando game_state:', { nuevaFase: 'ROUND_STANDBY', disparadoPor: 'processRoundEnd' });
       await supabase.from('game_state').update({ phase: 'ROUND_STANDBY' }).eq('room_id', roomId);
@@ -1395,7 +1430,10 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
                         ch.subscribe((status) => {
                           if (status === 'SUBSCRIBED') {
                             ch.send({ type: 'broadcast', event: 'KICK_ABS', payload: { target: p.id } })
-                              .then(() => supabase.removeChannel(ch));
+                              .then(() => {
+                                supabase.removeChannel(ch);
+                                refreshPlayers(); // Update Admin UI immediately
+                              });
                           }
                         });
                       }}
@@ -1528,7 +1566,7 @@ function PhaseStandby({ isTeacher, roomId, players, gameState }: { isTeacher: bo
   };
 
   return (
-    <div className="w-full max-w-2xl text-center space-y-12 pt-8 md:pt-0 animate-in zoom-in-50 duration-700 min-h-screen">
+    <div className="w-full max-w-2xl text-center space-y-12 md:mt-48 pt-8 md:pt-0 animate-in zoom-in-50 duration-700 min-h-screen">
       <div className="space-y-4">
         <h3 className="text-whapigen-cyan font-jetbrains tracking-[0.3em] text-sm uppercase">ROUND {gameState.current_round} CONCLUDED</h3>
         <h2 className="text-4xl md:text-5xl font-sora font-black uppercase tracking-tighter drop-shadow-md text-white">

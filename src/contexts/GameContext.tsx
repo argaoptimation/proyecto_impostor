@@ -49,6 +49,7 @@ interface GameContextType {
   loading: boolean;
   joinRoom: (code: string, nickname: string) => Promise<'success' | 'duplicate' | 'error' | 'spectator' | 'full'>;
   setActiveRoomId: (id: string | null) => void;
+  refreshPlayers: () => Promise<void>;
 }
 
 const GameContext = createContext<GameContextType>({
@@ -58,6 +59,7 @@ const GameContext = createContext<GameContextType>({
   loading: true,
   joinRoom: async () => 'error',
   setActiveRoomId: () => {},
+  refreshPlayers: async () => {},
 });
 
 export function GameProvider({ children }: { children: ReactNode }) {
@@ -141,6 +143,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
       setActiveRoomId(studentData.roomId);
     }
   }, [studentData, activeRoomId]);
+
+  const refreshPlayers = async () => {
+    if (!activeRoomId) return;
+    const { data } = await supabase.from('players').select('*').eq('room_id', activeRoomId);
+    if (data) setPlayers(data);
+  };
 
   useEffect(() => {
     if (!activeRoomId) {
@@ -355,7 +363,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   }, [activeRoomId, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <GameContext.Provider value={{ room, players, gameState, loading, joinRoom, setActiveRoomId }}>
+    <GameContext.Provider value={{ room, players, gameState, loading, joinRoom, setActiveRoomId, refreshPlayers }}>
       {children}
     </GameContext.Provider>
   );
