@@ -1130,8 +1130,14 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
       if (status === 'SUBSCRIBED') isSubscribed = true;
     });
 
+    // Polling fallback mechanism
+    const fetchVotesFallback = setInterval(() => {
+      fetchVotes();
+    }, 5000);
+
     return () => {
       clearTimeout(timer);
+      clearInterval(fetchVotesFallback);
       if (isSubscribed) supabase.removeChannel(channel);
     };
   }, [roomId]);

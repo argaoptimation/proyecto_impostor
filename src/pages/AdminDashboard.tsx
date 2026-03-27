@@ -65,7 +65,13 @@ export default function AdminDashboard() {
       })
       .subscribe();
 
+    // Polling fallback mechanism
+    const fetchRoomsFallback = setInterval(() => {
+      fetchRooms();
+    }, 5000);
+
     return () => {
+      clearInterval(fetchRoomsFallback);
       supabase.removeChannel(roomChannel);
     };
   }, [user]);

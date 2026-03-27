@@ -159,6 +159,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     let presenceChannel: ReturnType<typeof supabase.channel> | null = null;
     let presenceCleanupInterval: number | null = null;
     let keepAliveInterval: number | null = null;
+    let fallbackInterval: number | null = null;
 
     const setupRoom = async () => {
       const [roomRes, playersRes] = await Promise.all([
@@ -198,6 +199,15 @@ export function GameProvider({ children }: { children: ReactNode }) {
           if (success) clearInterval(interval);
         }, 1000);
       }
+
+      // Polling fallback mechanism for Supabase Realtime failures
+      fallbackInterval = window.setInterval(async () => {
+        const stateRes = await supabase.from('game_state').select('*').eq('room_id', roomId).maybeSingle();
+        if (stateRes.data) setGameState(stateRes.data);
+
+        const playersRes = await supabase.from('players').select('*').eq('room_id', roomId);
+        if (playersRes.data) setPlayers(playersRes.data);
+      }, 5000);
 
       // ── MAIN REALTIME CHANNEL ────────────────────────────────────────────
       channel = supabase.channel(`room:${roomId}`)
@@ -333,6 +343,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     return () => {
       if (presenceCleanupInterval) window.clearInterval(presenceCleanupInterval);
       if (keepAliveInterval) window.clearInterval(keepAliveInterval);
+      if (fallbackInterval) window.clearInterval(fallbackInterval);
       if (presenceChannel) supabase.removeChannel(presenceChannel);
       // FIX 4: Only remove the main channel if it successfully opened.
       // Calling removeChannel on an un-SUBSCRIBED channel causes
