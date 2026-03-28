@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { ArrowRight, AlertCircle, Loader2 } from 'lucide-react';
 import { useGame } from '../contexts/GameContext';
 import { GlitchLogo } from '../components/ui/GlitchLogo';
@@ -13,8 +12,7 @@ export default function JoinScreen() {
   const [roomCode, setRoomCode] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const navigate = useNavigate();
-  const { joinRoom } = useGame();
+  useGame();
 
   const handleJoin = async (e: React.FormEvent) => {
     e.preventDefault();
