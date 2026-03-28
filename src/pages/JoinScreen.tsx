@@ -1,18 +1,19 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ArrowRight, AlertCircle, Loader2 } from 'lucide-react';
+import { supabase } from '../lib/supabase'; // <--- DEJÁ SOLO ESTA
 import { useGame } from '../contexts/GameContext';
 import { GlitchLogo } from '../components/ui/GlitchLogo';
 import { CyberRain } from '../components/ui/CyberRain';
 import { RainToggle } from '../components/ui/RainToggle';
-import { supabase } from '../lib/supabase';
-
 
 export default function JoinScreen() {
   const [nickname, setNickname] = useState('');
   const [roomCode, setRoomCode] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  useGame();
+  const navigate = useNavigate(); // <-- LO VOLVEMOS A USAR
+  const { joinRoom } = useGame(); // <-- TAMBIÉN LO NECESITAMOS
 
   const handleJoin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,23 +28,23 @@ export default function JoinScreen() {
         .eq('room_code', roomCode)
         .single();
 
-      if (roomError || !roomData) throw new Error('ACCESS INVALID | CHANGE NICKNAME');
-      if (roomData.status !== 'LOBBY') throw new Error('MISSION IN PROGRESS');
+      // FIX ERROR: Si no encuentra la sala, el error es el CÓDIGO, no el nombre.
+      if (roomError || !roomData) throw new Error('ACCESS COORDINATE NOT FOUND');
+      if (roomData.status !== 'LOBBY') throw new Error('MISSION ALREADY IN PROGRESS');
 
-      // --- EL CANDADO: Verificamos si el Nickname ya existe en ESTA sala ---
+      // 2. Validar Nickname (El candado)
       const { data: existingPlayer } = await supabase
         .from('players')
         .select('id')
         .eq('room_id', roomData.id)
-        .eq('nickname', nickname.trim()) // .trim() por si meten espacios
-        .maybeSingle(); // Nos devuelve el dato si existe, o null si está libre
+        .eq('nickname', nickname.trim())
+        .maybeSingle();
 
       if (existingPlayer) {
-        throw new Error('NICKNAME ALREADY LINKED TO THIS MISSION');
+        throw new Error('NICKNAME ALREADY TAKEN IN THIS ROOM');
       }
-      // ------------------------------------------------------------------
 
-      // 2. Si pasó el candado, recién ahí hacemos el insert
+      // 3. Insertar Jugador
       const { error: joinError } = await supabase.from('players').insert({
         room_id: roomData.id,
         nickname: nickname.trim(),
@@ -53,7 +54,11 @@ export default function JoinScreen() {
 
       if (joinError) throw joinError;
 
-      // Redirigir a la sala...
+      // 4. ¡LA CLAVE! Redirigir y avisar al Contexto
+      // Esto es lo que nos faltaba para que "entre" de verdad
+      joinRoom(roomData.id, nickname.trim());
+      navigate(`/room/${roomCode}`);
+
     } catch (err: any) {
       setError(err.message);
     } finally {
