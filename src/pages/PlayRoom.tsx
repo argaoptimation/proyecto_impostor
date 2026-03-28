@@ -8,6 +8,7 @@ import { Users, EyeOff, Target, Crosshair, LogOut, Home, X, Loader2, Lock, Shiel
 import gsap from 'gsap';
 import { getRandomWordEntry, getHintsForWord } from '../data/words';
 import { CyberRain } from '../components/ui/CyberRain';
+import { RainToggle } from '../components/ui/RainToggle';
 
 
 export default function PlayRoom() {
@@ -322,6 +323,7 @@ export default function PlayRoom() {
   return (
     <div translate="no" className={`min-h-[100dvh] flex flex-col justify-start md:justify-between relative w-full overflow-y-auto overflow-x-hidden transition-all duration-700 bg-[#050505] ${isMyTurn ? 'shadow-[inset_0_0_120px_rgba(0,240,255,0.2)]' : ''}`}>
       <CyberRain />
+      <RainToggle />
 
       {isMyTurn && (
         <div className="absolute inset-0 pointer-events-none border-[12px] border-whapigen-cyan/20 animate-pulse z-40 rounded-none duration-1000"></div>

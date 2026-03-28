@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { LogOut, Plus, Users, Play, Clock, Hash, Loader2, Trash2, ArrowRight, ShieldCheck, ChevronDown } from 'lucide-react';
 import { GlitchLogo } from '../components/ui/GlitchLogo';
 import { CyberRain } from '../components/ui/CyberRain';
+import { RainToggle } from '../components/ui/RainToggle';
 
 
 function GameSelect({ label, value, onChange, options }: { label: string, value: any, onChange: (v: any) => void, options: { label: string, value: any }[] }) {
@@ -68,7 +69,7 @@ export default function AdminDashboard() {
     // Polling fallback mechanism
     const fetchRoomsFallback = setInterval(() => {
       fetchRooms();
-    }, 5000);
+    }, 2500);
 
     return () => {
       clearInterval(fetchRoomsFallback);
@@ -159,6 +160,7 @@ export default function AdminDashboard() {
     <div className="h-[100dvh] p-8 max-w-6xl mx-auto flex flex-col relative overflow-x-hidden justify-between">
       {/* NEW: Cyber-Rain Background */}
       <CyberRain />
+      <RainToggle />
 
 
       <header className="flex justify-between items-center pb-8 border-b border-white/5 relative z-20 gap-2">

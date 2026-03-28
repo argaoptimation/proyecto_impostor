@@ -4,6 +4,7 @@ import { ArrowRight, AlertCircle, Loader2 } from 'lucide-react';
 import { useGame } from '../contexts/GameContext';
 import { GlitchLogo } from '../components/ui/GlitchLogo';
 import { CyberRain } from '../components/ui/CyberRain';
+import { RainToggle } from '../components/ui/RainToggle';
 
 
 export default function JoinScreen() {
@@ -52,6 +53,7 @@ export default function JoinScreen() {
 
       {/* NEW: Cyber-Rain Background */}
       <CyberRain />
+      <RainToggle />
 
 
 
