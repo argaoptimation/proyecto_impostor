@@ -878,7 +878,7 @@ function PhaseReveal({ isTeacher, roomId, players }: { isTeacher: boolean, roomI
 // ---------------- SPEAKING TURNS PHASE ----------------
 function PhaseSpeaking({ isTeacher, room, gameState, players }: { isTeacher: boolean, room: any, gameState: any, players: any[] }) {
   const { studentData } = useAuth();
-  const { refreshPlayers } = useGame();
+  const { refreshPlayers, serverTimeOffset } = useGame();
   const circleRef = useRef(null);
   const tlRef = useRef<gsap.core.Tween | null>(null);
   const currentPlayer = players.find((p: any) => p.id === gameState.current_turn_player_id);
@@ -892,7 +892,8 @@ function PhaseSpeaking({ isTeacher, room, gameState, players }: { isTeacher: boo
   let rawTimeLeftMs = room.turn_duration * 1000;
   if (gameState.turn_started_at) {
     const startedAt = new Date(gameState.turn_started_at).getTime();
-    const elapsedMs = Date.now() - startedAt;
+    const nowWithOffset = Date.now() + (serverTimeOffset || 0);
+    const elapsedMs = nowWithOffset - startedAt;
     rawTimeLeftMs = (room.turn_duration * 1000) - elapsedMs;
   }
   let actualTimeLeft = Math.max(0, Math.floor(rawTimeLeftMs / 1000));
@@ -928,7 +929,8 @@ function PhaseSpeaking({ isTeacher, room, gameState, players }: { isTeacher: boo
     let currentOffset = 283;
     if (gameState.turn_started_at) {
       const startedAt = new Date(gameState.turn_started_at).getTime();
-      const elapsedS = (Date.now() - startedAt) / 1000;
+      const nowWithOffset = Date.now() + (serverTimeOffset || 0);
+      const elapsedS = (nowWithOffset - startedAt) / 1000;
       const progress = Math.min(1, Math.max(0, elapsedS / room.turn_duration));
       currentOffset = 283 - (283 * progress);
     }
@@ -958,7 +960,8 @@ function PhaseSpeaking({ isTeacher, room, gameState, players }: { isTeacher: boo
       tlRef.current.kill();
       // Recompute remaining time and restart a fresh tween from current offset
       const startedAt = new Date(gameState.turn_started_at || Date.now()).getTime();
-      const elapsedS = (Date.now() - startedAt) / 1000;
+      const nowWithOffset = Date.now() + (serverTimeOffset || 0);
+      const elapsedS = (nowWithOffset - startedAt) / 1000;
       const progress = Math.min(1, Math.max(0, elapsedS / room.turn_duration));
       const currentOffset = 283 - (283 * progress);
       gsap.set(circleRef.current, { strokeDashoffset: currentOffset });
@@ -1021,7 +1024,7 @@ function PhaseSpeaking({ isTeacher, room, gameState, players }: { isTeacher: boo
             <span key="waiting-for" className="text-white/70">{`WAITING FOR ${currentPlayer?.nickname || '...'}`}</span>
           )}
         </h3>
-        <h2 className={`text-4xl md:text-6xl font-sora font-bold text-white uppercase transition-all duration-500 flex items-center justify-center gap-4 ${currentPlayer?.id === studentData?.playerId ? 'border-neon-active p-8 rounded-[40px] bg-whapigen-cyan/5 scale-110' : 'drop-shadow-neon-cyan opacity-80'}`}>
+        <h2 className={`text-4xl md:text-6xl font-sora font-bold text-white uppercase transition-all duration-500 flex items-center justify-center gap-4 ${currentPlayer?.id === studentData?.playerId ? 'border-neon-active p-8 rounded-[40px] bg-whapigen-cyan/5 scale-95' : 'drop-shadow-neon-cyan opacity-80'}`}>
           {currentPlayer?.id === studentData?.playerId ? <span key="arrow-left" className="arrow-indicator">{">>"}</span> : null}
           <span key="player-name">{currentPlayer?.nickname || 'UNKNOWN'}</span>
           {currentPlayer?.id === studentData?.playerId ? <span key="arrow-right" className="arrow-indicator">{"<<"}</span> : null}
@@ -1039,16 +1042,16 @@ function PhaseSpeaking({ isTeacher, room, gameState, players }: { isTeacher: boo
             ref={circleRef}
             cx="50" cy="50" r="45"
             fill="none"
-            stroke={actualTimeLeft <= 5 ? '#ff003c' : '#00F0FF'}
+            stroke={displayTime <= 5 ? '#ff003c' : '#00F0FF'}
             strokeWidth="4"
             strokeDasharray="283"
             strokeDashoffset="283"
             strokeLinecap="round"
-            style={{ filter: `drop-shadow(0 0 6px ${actualTimeLeft <= 5 ? '#ff003c' : '#00F0FF'})` }}
-            className={actualTimeLeft <= 5 ? 'animate-pulse' : ''}
+            style={{ filter: `drop-shadow(0 0 6px ${displayTime <= 5 ? '#ff003c' : '#00F0FF'})` }}
+            className={displayTime <= 5 ? 'animate-pulse' : ''}
           />
         </svg>
-        <div className={`relative z-10 text-6xl font-jetbrains font-extrabold text-white drop-shadow-md ${actualTimeLeft <= 5 ? 'text-[#ff003c] animate-pulse drop-shadow-neon-red' : ''}`}>
+        <div className={`relative z-10 text-6xl font-jetbrains font-extrabold text-white drop-shadow-md ${displayTime <= 5 ? 'text-[#ff003c] animate-pulse drop-shadow-neon-red' : ''}`}>
           {displayTime}
         </div>
       </div>
@@ -1124,7 +1127,7 @@ function PhaseSpeaking({ isTeacher, room, gameState, players }: { isTeacher: boo
 // ---------------- VOTING PHASE ----------------
 function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeacher: boolean, roomId: string, players: any[], gameState: any, room: any }) {
   const { studentData } = useAuth();
-  const { refreshPlayers } = useGame();
+  const { refreshPlayers, serverTimeOffset } = useGame();
   const [votes, setVotes] = useState<any[]>([]);
   const alivePlayers = players.filter((p: any) => !p.is_eliminated && !p.is_host);
   const currentUser = players.find((p: any) => p.id === studentData?.playerId);
@@ -1179,7 +1182,8 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
   let rawTimeLeftMs = room.voting_duration * 1000;
   if (gameState.turn_started_at) {
     const startedAt = new Date(gameState.turn_started_at).getTime();
-    const elapsedMs = Date.now() - startedAt;
+    const nowWithOffset = Date.now() + (serverTimeOffset || 0);
+    const elapsedMs = nowWithOffset - startedAt;
     rawTimeLeftMs = (room.voting_duration * 1000) - elapsedMs;
   }
   let actualTimeLeft = Math.max(0, Math.floor(rawTimeLeftMs / 1000));
@@ -1237,7 +1241,8 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
       tlRef.current.kill();
       // Rebuild tween from current remaining time so the visual threshold (5s red) is accurate
       const startedAt = new Date(gameState.turn_started_at || Date.now()).getTime();
-      const elapsedS = (Date.now() - startedAt) / 1000;
+      const nowWithOffset = Date.now() + (serverTimeOffset || 0);
+      const elapsedS = (nowWithOffset - startedAt) / 1000;
       const progress = Math.min(1, Math.max(0, elapsedS / room.voting_duration));
       const currentOffset = 283 - (283 * progress);
       gsap.set(circleRef.current, { strokeDashoffset: currentOffset });
@@ -1366,16 +1371,16 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
               ref={circleRef}
               cx="50" cy="50" r="46"
               fill="none"
-              stroke={actualTimeLeft <= 5 ? '#ff003c' : '#a855f7'}
+              stroke={displayTime <= 5 ? '#ff003c' : '#a855f7'}
               strokeWidth="8"
               strokeDasharray="289"
               strokeDashoffset="289"
               strokeLinecap="round"
-              style={{ filter: `drop-shadow(0 0 20px ${actualTimeLeft <= 5 ? '#ff003c' : '#9333ea'})` }}
-              className={actualTimeLeft <= 5 ? 'animate-pulse' : ''}
+              style={{ filter: `drop-shadow(0 0 20px ${displayTime <= 5 ? '#ff003c' : '#9333ea'})` }}
+              className={displayTime <= 5 ? 'animate-pulse' : ''}
             />
           </svg>
-          <div className={`relative z-10 text-6xl font-jetbrains font-black text-white ${actualTimeLeft <= 5 ? 'text-[#ff003c] animate-pulse drop-shadow-neon-red' : 'drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]'}`}>
+          <div className={`relative z-10 text-6xl font-jetbrains font-black text-white ${displayTime <= 5 ? 'text-[#ff003c] animate-pulse drop-shadow-neon-red' : 'drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]'}`}>
             {displayTime}
           </div>
         </div>
@@ -1624,20 +1629,20 @@ function PersistentWordBar({ role, secretWord, hintsEnabled, hints, phaseStarted
 
   return (
     <div
-      className="relative md:fixed md:top-[153px] md:left-1/2 md:-translate-x-1/2 z-[80] bg-black/60 backdrop-blur-xl border border-white/5 text-whapigen-cyan font-jetbrains px-8 md:px-12 py-3 md:py-5 rounded-full shadow-[0_30px_60px_rgba(0,0,0,0.5)] cursor-pointer select-none max-w-[95vw] mx-auto md:mx-0 transition-all hover:bg-white/5 group/word ring-1 ring-white/10 mt-4 md:mt-0"
+      className="relative md:fixed md:top-[153px] md:left-1/2 md:-translate-x-1/2 z-[80] bg-black/60 backdrop-blur-xl border border-white/5 text-whapigen-cyan font-jetbrains px-8 md:px-12 py-3 md:py-5 rounded-full shadow-[0_30px_60px_rgba(0,0,0,0.5)] cursor-pointer select-none max-w-[85vw] mx-auto md:mx-0 transition-all hover:bg-white/5 group/word ring-1 ring-white/10 mt-4"
       onClick={() => setRevealed(prev => !prev)}
     >
-      <div className="absolute inset-0 bg-digital-grid bg-[length:25px_25px] opacity-[0.01] pointer-events-none"></div>
+      <div className="absolute inset-0 bg-digital-grid bg-[length:20px_20px] opacity-[0.01] pointer-events-none"></div>
       {!revealed ? (
-        <div className="flex items-center gap-4 font-black tracking-[1em] text-[10px] ml-[1em] group-hover/word:text-whapigen-cyan transition-colors">
+        <div className="flex items-center gap-4 font-black tracking-[0.3em] text-[10px] ml-[0.3em] group-hover/word:text-whapigen-cyan transition-colors">
           <EyeOff className="w-4 h-4 text-white/20 group-hover/word:text-whapigen-cyan transition-all" />
-          <span className="text-white/70 font-sora text-xs uppercase group-hover/word:text-white transition-colors animate-pulse">TOUCH TO REVEAL</span>
+          <span className="text-white/70 font-sora text-sm md:text-xs uppercase group-hover/word:text-white transition-colors animate-pulse">TOUCH TO REVEAL</span>
         </div>
       ) : (
         role === 'IMPOSTOR' ? (
           <div className="flex flex-col items-center gap-3 animate-in slide-in-from-top duration-500">
-            <div className="flex items-center gap-2 md:gap-4 tracking-[0.2em] md:tracking-[0.4em] font-black text-[9px] md:text-[11px] w-max max-w-[90vw] md:max-w-none bg-whapigen-red/10 px-4 md:px-8 py-1 rounded-full border border-whapigen-red/20 whitespace-normal text-center">
-              <EyeOff className="w-3 h-3 md:w-4 md:h-4 shrink-0 text-whapigen-red shadow-neon-red shadow-[0_0_15px_#ff3131]" />
+            <div className="flex items-center gap-2 md:gap-4 tracking-[0.2em] md:tracking-[0.4em] font-black text-[9px] md:text-[11px] w-max max-w-[80vw] md:max-w-none bg-whapigen-red/10 px-4 md:px-8 py-1 rounded-full border border-whapigen-red/20 whitespace-normal text-center">
+              <EyeOff className="w-4 h-4 md:w-4 md:h-4 shrink-0 text-whapigen-red shadow-neon-red shadow-[0_0_15px_#ff3131]" />
               <span className="text-whapigen-red shadow-neon-red">YOU ARE THE IMPOSTOR</span>
             </div>
             {/* ── IMPOSTOR HINT: "RECEIVE INTEL" toggle appears after 10s ── */}
@@ -1661,9 +1666,9 @@ function PersistentWordBar({ role, secretWord, hintsEnabled, hints, phaseStarted
             )}
           </div>
         ) : (
-          <div className="flex items-center gap-2 md:gap-4 tracking-[0.2em] md:tracking-[0.5em] text-[9px] md:text-[11px] w-max max-w-[90vw] md:max-w-none bg-whapigen-cyan/10 px-4 md:px-8 py-1 rounded-full border border-whapigen-cyan/20 whitespace-normal text-center">
+          <div className="flex items-center gap-2 md:gap-2 tracking-[0.2em] md:tracking-[0.2em] text-[9px] md:text-[11px] w-max max-w-[80vw] md:max-w-none bg-whapigen-cyan/10 px-4 py-1 rounded-full border border-whapigen-cyan/20 whitespace-normal text-center">
             <Target className="w-4 h-4 text-whapigen-cyan shadow-neon-cyan" />
-            <span className="text-white/70 text-xs">SECRET WORD:</span>
+            <span className="text-white/70 text-sm">SECRET WORD:</span>
             <span className="font-black text-white uppercase drop-shadow-neon-cyan tracking-[0.4em] break-words flex items-center justify-center min-w-0 text-center" style={{ fontSize: 'clamp(0.85rem, 3.5vw, 1.5rem)' }}>
               {secretWord}
             </span>

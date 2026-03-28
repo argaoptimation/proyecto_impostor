@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, useRef, ReactNode } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, getServerTimeOffset } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 
 export type GamePhase = 'LOBBY' | 'ROLE_REVEAL' | 'SPEAKING_TURNS' | 'VOTING' | 'ROUND_STANDBY' | 'RESULTS';
@@ -46,6 +46,7 @@ interface GameContextType {
   room: Room | null;
   players: Player[];
   gameState: GameState | null;
+  serverTimeOffset: number;
   loading: boolean;
   joinRoom: (code: string, nickname: string) => Promise<'success' | 'duplicate' | 'error' | 'spectator' | 'full'>;
   setActiveRoomId: (id: string | null) => void;
@@ -56,10 +57,11 @@ const GameContext = createContext<GameContextType>({
   room: null,
   players: [],
   gameState: null,
+  serverTimeOffset: 0,
   loading: true,
   joinRoom: async () => 'error',
-  setActiveRoomId: () => {},
-  refreshPlayers: async () => {},
+  setActiveRoomId: () => { },
+  refreshPlayers: async () => { },
 });
 
 export function GameProvider({ children }: { children: ReactNode }) {
@@ -69,6 +71,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [room, setRoom] = useState<Room | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
   const [gameState, setGameState] = useState<GameState | null>(null);
+  const [serverTimeOffset, setServerTimeOffset] = useState<number>(0);
   const [loading, setLoading] = useState(true);
 
   // ── STABLE REFS: capture studentData and userId at channel-setup time so the
@@ -79,6 +82,14 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
   const userIdRef = useRef(user?.id);
   useEffect(() => { userIdRef.current = user?.id; }, [user?.id]);
+
+  // Fetch server time offset exactly once on load
+  useEffect(() => {
+    getServerTimeOffset().then(offset => {
+      console.log('⏱️ SERVER TIME OFFSET:', offset, 'ms');
+      setServerTimeOffset(offset);
+    });
+  }, []);
 
   const joinRoom = async (code: string, nickname: string) => {
     // 1. Find Room
@@ -215,7 +226,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
         const playersRes = await supabase.from('players').select('*').eq('room_id', roomId);
         if (playersRes.data) setPlayers(playersRes.data);
-      }, 5000);
+      }, 2500);
 
       // ── MAIN REALTIME CHANNEL ────────────────────────────────────────────
       channel = supabase.channel(`room:${roomId}`)
@@ -276,16 +287,16 @@ export function GameProvider({ children }: { children: ReactNode }) {
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` }, (payload) => {
           if (payload.eventType === 'DELETE') {
-             if (userIdRef.current) {
-                console.warn('🚨 SALA ELIMINADA - Retornando Admin al Dashboard');
-                window.location.href = '/admin/dashboard';
-             } else {
-                console.warn('🚨 SALA ELIMINADA POR ADMIN - Expulsando a /join');
-                sessionStorage.clear();
-                window.location.href = '/join';
-             }
+            if (userIdRef.current) {
+              console.warn('🚨 SALA ELIMINADA - Retornando Admin al Dashboard');
+              window.location.href = '/admin/dashboard';
+            } else {
+              console.warn('🚨 SALA ELIMINADA POR ADMIN - Expulsando a /join');
+              sessionStorage.clear();
+              window.location.href = '/join';
+            }
           } else {
-             setRoom(payload.new as Room);
+            setRoom(payload.new as Room);
           }
         });
 
@@ -310,7 +321,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
           })
           .subscribe();
 
-      // ── PRESENCE: STUDENT ────────────────────────────────────────────────
+        // ── PRESENCE: STUDENT ────────────────────────────────────────────────
       } else if (studentDataRef.current?.playerId) {
         // Students emit presence every 10 seconds (keep-alive) so the host
         // never sees them as "idle" and fires false 'leave' events.
@@ -358,12 +369,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
       // "WebSocket is closed before connection" errors during rapid re-renders.
       if (channel && channelSubscribed) supabase.removeChannel(channel);
     };
-  // ── studentData is intentionally NOT in deps — it's read via studentDataRef
-  //    to avoid rebuilding channels (and wiping player state) on auth updates. ──
+    // ── studentData is intentionally NOT in deps — it's read via studentDataRef
+    //    to avoid rebuilding channels (and wiping player state) on auth updates. ──
   }, [activeRoomId, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <GameContext.Provider value={{ room, players, gameState, loading, joinRoom, setActiveRoomId, refreshPlayers }}>
+    <GameContext.Provider value={{ room, players, gameState, serverTimeOffset, loading, joinRoom, setActiveRoomId, refreshPlayers }}>
       {children}
     </GameContext.Provider>
   );
