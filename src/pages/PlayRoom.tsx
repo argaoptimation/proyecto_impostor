@@ -412,9 +412,30 @@ export default function PlayRoom() {
                 <span className="text-white">WORD:</span>
                 <span className="text-white bg-white/5 px-4 py-1 rounded-full border border-white/5 text-[clamp(0.75rem,0.5vw+0.5rem,1rem)]">{gameState.secret_word || '???'}</span>
               </div>
-              <div className="flex items-center gap-3">
-                <span className="text-white">IMPOSTOR:</span>
-                <span className="text-whapigen-red bg-whapigen-red/5 px-4 py-1 rounded-full border border-whapigen-red/20 drop-shadow-neon-red text-[clamp(0.75rem,0.5vw+0.5rem,1rem)]">{activePlayers.find(p => p.role === 'IMPOSTOR')?.nickname || '???'}</span>
+              <div className="flex items-start gap-3">
+                {/* Ajusté el label para que siempre diga IMPOSTORS si hay juego en curso */}
+                <span className="text-white mt-1 text-xs font-bold tracking-wider opacity-60">IMPOSTORS:</span>
+
+                <div className="flex flex-col gap-2">
+                  {activePlayers
+                    .filter(p => p.role === 'IMPOSTOR')
+                    // !!! FIX DEL BAILE: Ordenamos alfabéticamente por nickname para fijar la posición !!!
+                    .sort((a, b) => a.nickname.localeCompare(b.nickname))
+                    // El .map renderiza dinámicamente cuántos impostores haya (1, 2, 3 o 10)
+                    .map((impostor) => (
+                      <span
+                        key={impostor.id} // Clave única para React
+                        className="text-whapigen-red bg-whapigen-red/5 px-4 py-1.5 rounded-full border border-whapigen-red/20 drop-shadow-neon-red text-[clamp(0.75rem,0.5vw+0.5rem,1rem)] text-center animate-in fade-in zoom-in-95 font-black uppercase tracking-wider"
+                      >
+                        {impostor.nickname}
+                      </span>
+                    ))}
+
+                  {/* Fallback por si la partida no empezó o no hay impostores */}
+                  {activePlayers.filter(p => p.role === 'IMPOSTOR').length === 0 && (
+                    <span className="text-white/20 italic text-xs px-2 py-1">AWAITING INTEL...</span>
+                  )}
+                </div>
               </div>
               <button
                 onClick={handleEndSession}
@@ -513,14 +534,17 @@ function PhaseLobby({ isTeacher, roomId, players, roomLevel }: { isTeacher: bool
     // Get the word first before assigning roles individually
     const wordEntry = getRandomWordEntry(roomLevel);
 
-    // ── FIX 1: INDIVIDUAL ROLE DISTRIBUTION (Avoids massive update constraints) ──
+    // ── DISTRIBUTE ROLES AND INITIAL TURN ORDER ──
+    const shuffledForOrder = [...livePlayers].sort(() => Math.random() - 0.5);
+    const turnOrderMap = new Map(shuffledForOrder.map((p, i) => [p.id, i]));
+
     const roleUpdates = livePlayers.map(p => {
       const isImpostor = impostorIds.has(p.id);
       return supabase.from('players').update({
         role: isImpostor ? 'IMPOSTOR' : 'CITIZEN',
         secret_word: isImpostor ? null : wordEntry.word,
         is_eliminated: false,
-        turn_order: null
+        turn_order: turnOrderMap.get(p.id)
       }).eq('id', p.id);
     });
 
@@ -530,13 +554,14 @@ function PhaseLobby({ isTeacher, roomId, players, roomLevel }: { isTeacher: bool
     // Wipe any stale votes from a previous round before entering
     await supabase.from('votes').delete().eq('room_id', roomId);
 
-    // Pick first speaker and push game state
-    const firstPlayer = livePlayers[Math.floor(Math.random() * n)];
+    // Pick first speaker based on turn_order 0
+    const firstPlayer = shuffledForOrder[0];
     console.warn('📝 DB WRITE - Cambiando game_state:', { nuevaFase: 'ROLE_REVEAL', disparadoPor: 'startGame' });
     await supabase.from('game_state').update({
       phase: 'ROLE_REVEAL',
       secret_word: wordEntry.word,
       current_turn_player_id: firstPlayer.id,
+      current_turn_index: 0,
       current_round: 1,
       max_rounds: 3
     }).eq('room_id', roomId);
@@ -778,20 +803,19 @@ function PhaseReveal({ isTeacher, roomId, players }: { isTeacher: boolean, roomI
         return;
       }
 
-      // 3. VALID TURN ALLOCATION: Shuffle fresh alive students
-      const shuffled = [...freshPlayers].sort(() => Math.random() - 0.5);
+      // 3. FIND FIRST ALIVE PLAYER IN SEQUENCE
+      const firstPlayer = freshPlayers.sort((a, b) => (a.turn_order || 0) - (b.turn_order || 0))[0];
 
-      // 4. Update turn_orders in DB
-      const updates = shuffled.map((p, index) =>
-        supabase.from('players').update({ turn_order: index }).eq('id', p.id)
-      );
-      await Promise.all(updates);
+      if (!firstPlayer) {
+        console.error("No alive first player found");
+        return;
+      }
 
-      // 5. Update GameState using verified ID
+      // 4. Update GameState using verified ID and its existing turn_order
       const { error } = await supabase.from('game_state').update({
         phase: 'SPEAKING_TURNS',
-        current_turn_index: 0,
-        current_turn_player_id: shuffled[0].id,
+        current_turn_index: firstPlayer.turn_order || 0,
+        current_turn_player_id: firstPlayer.id,
         turn_started_at: new Date().toISOString(),
         is_paused: false
       }).eq('room_id', roomId);
@@ -981,13 +1005,17 @@ function PhaseSpeaking({ isTeacher, room, gameState, players }: { isTeacher: boo
       console.warn('⛔ handleNextTurn BLOQUEADO: Fase de Lobby activa o faltan jugadores.');
       return;
     }
-    const nextIndex = gameState.current_turn_index + 1;
-    const nextPlayer = players.find((p: any) => p.turn_order === nextIndex && !p.is_eliminated);
+    // 1. FIND ALL CANDIDATES: Alive players with turn_order > current
+    const nextCandidates = players
+      .filter((p: any) => !p.is_eliminated && !p.is_host && (p.turn_order || 0) > gameState.current_turn_index)
+      .sort((a, b) => (a.turn_order || 0) - (b.turn_order || 0));
+
+    const nextPlayer = nextCandidates[0];
 
     if (nextPlayer) {
       console.warn('📝 DB WRITE - Cambiando game_state:', { nuevaFase: 'Mismo (Siguiente Turno)', disparadoPor: 'handleNextTurn' });
       await supabase.from('game_state').update({
-        current_turn_index: nextIndex,
+        current_turn_index: nextPlayer.turn_order,
         current_turn_player_id: nextPlayer.id,
         turn_started_at: new Date().toISOString(),
         is_paused: false
@@ -1292,27 +1320,44 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
       console.warn('⛔ calculateResults BLOQUEADO: Fase de Lobby activa o faltan jugadores.');
       return;
     }
-    // ── FRESH DB FETCH: always calculate from live DB data, not stale local state ──
-    const { data: liveVotes } = await supabase.from('votes').select('*').eq('room_id', roomId);
-    if (!liveVotes || liveVotes.length === 0) {
-      // No votes at all; pick random elimination
-      const randomTarget = alivePlayers[Math.floor(Math.random() * alivePlayers.length)];
-      if (!randomTarget) return;
-      await processRoundEnd(randomTarget.id);
+
+    // --- CANDADO 1: Mínimo de 3 jugadores vivos ---
+    // Si ya solo quedan 3, no permitimos eliminaciones para que el juego no se rompa.
+    if (alivePlayers.length <= 3) {
+      console.warn('⚠️ MÍNIMO ALCANZADO: Manteniendo 3 jugadores para estabilidad de la partida.');
+      await processRoundEnd(null);
       return;
     }
 
-    // 1. Tally votes from LIVE data
+    // Traemos los votos frescos de la DB
+    const { data: liveVotes } = await supabase.from('votes').select('*').eq('room_id', roomId);
+
+    // --- CANDADO 2: Si nadie votó, nadie muere ---
+    // Eliminamos el "randomTarget" porque queremos justicia por votos.
+    if (!liveVotes || liveVotes.length === 0) {
+      console.log('🗳️ SIN VOTOS: Empate técnico por silencio.');
+      await processRoundEnd(null);
+      return;
+    }
+
+    // 1. Conteo de votos
     const targetCounts: Record<string, number> = {};
     liveVotes.forEach(v => {
       targetCounts[v.target_id] = (targetCounts[v.target_id] || 0) + 1;
     });
 
-    // 2. Find max voted
+    // 2. Encontrar el máximo y ver cuántos lo comparten
     const maxVotes = Math.max(...Object.values(targetCounts), 0);
     const topCandidates = Object.keys(targetCounts).filter(id => targetCounts[id] === maxVotes);
 
-    const eliminatedId = (maxVotes > 0 && topCandidates.length === 1) ? topCandidates[0] : null;
+    // --- CANDADO 3: Regla de Mayoría y Empate ---
+    // Solo hay eliminado si hay EXACTAMENTE un candidato con el máximo de votos.
+    // Si topCandidates.length > 1, significa que hay empate (ej: 2 votos para A, 2 para B).
+    const eliminatedId = topCandidates.length === 1 ? topCandidates[0] : null;
+
+    if (!eliminatedId && maxVotes > 0) {
+      console.log('⚖️ EMPATE DETECTADO: Varios jugadores tienen', maxVotes, 'votos. Nadie sale.');
+    }
 
     await processRoundEnd(eliminatedId);
   };
@@ -1555,19 +1600,20 @@ function PhaseResults({ isTeacher, roomId, players }: { isTeacher: boolean, room
 // ---------------- ROUND STANDBY PHASE ----------------
 function PhaseStandby({ isTeacher, roomId, players, gameState }: { isTeacher: boolean, roomId: string, players: any[], gameState: any }) {
   const startNextRound = async () => {
-    const alivePlayers = players.filter(p => !p.is_eliminated && !p.is_host);
+    const alivePlayers = players
+      .filter(p => !p.is_eliminated && !p.is_host)
+      .sort((a, b) => (a.turn_order || 0) - (b.turn_order || 0));
+
     if (alivePlayers.length === 0) return;
 
-    const shuffled = [...alivePlayers].sort(() => Math.random() - 0.5);
-    const turnUpdates = shuffled.map((p, index) => supabase.from('players').update({ turn_order: index }).eq('id', p.id));
-    await Promise.all(turnUpdates);
+    const firstPlayer = alivePlayers[0];
 
     console.warn('📝 DB WRITE - Cambiando game_state:', { nuevaFase: 'SPEAKING_TURNS', disparadoPor: 'PhaseStandby (Siguiente Ronda)' });
     await supabase.from('game_state').update({
       phase: 'SPEAKING_TURNS',
       current_round: gameState.current_round + 1,
-      current_turn_index: 0,
-      current_turn_player_id: shuffled[0].id,
+      current_turn_index: firstPlayer.turn_order || 0,
+      current_turn_player_id: firstPlayer.id,
       turn_started_at: new Date().toISOString()
     }).eq('room_id', roomId);
   };

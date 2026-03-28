@@ -5,6 +5,7 @@ import { useGame } from '../contexts/GameContext';
 import { GlitchLogo } from '../components/ui/GlitchLogo';
 import { CyberRain } from '../components/ui/CyberRain';
 import { RainToggle } from '../components/ui/RainToggle';
+import { supabase } from '../lib/supabase';
 
 
 export default function JoinScreen() {
@@ -17,33 +18,47 @@ export default function JoinScreen() {
 
   const handleJoin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!nickname.trim() || roomCode.length !== 4) {
-      setError('Please enter a valid nickname and 4-digit code.');
-      return;
-    }
-
     setIsSubmitting(true);
     setError(null);
 
-    const result = await joinRoom(roomCode.toUpperCase(), nickname.trim());
+    try {
+      // 1. Primero buscamos el ID de la sala usando el código
+      const { data: roomData, error: roomError } = await supabase
+        .from('rooms')
+        .select('id, status')
+        .eq('room_code', roomCode)
+        .single();
 
-    if (result === 'success' || result === 'spectator') {
-      const stored = sessionStorage.getItem('impostor_student_auth');
-      if (stored) {
-        const { roomId } = JSON.parse(stored);
-        if (result === 'spectator') {
-          alert('MISSION IN PROGRESS // You are entering as an invisible spectator until the next round initializes.');
-        }
-        navigate(`/game/${roomId}`);
+      if (roomError || !roomData) throw new Error('ACCESS INVALID | CHANGE NICKNAME');
+      if (roomData.status !== 'LOBBY') throw new Error('MISSION IN PROGRESS');
+
+      // --- EL CANDADO: Verificamos si el Nickname ya existe en ESTA sala ---
+      const { data: existingPlayer } = await supabase
+        .from('players')
+        .select('id')
+        .eq('room_id', roomData.id)
+        .eq('nickname', nickname.trim()) // .trim() por si meten espacios
+        .maybeSingle(); // Nos devuelve el dato si existe, o null si está libre
+
+      if (existingPlayer) {
+        throw new Error('NICKNAME ALREADY LINKED TO THIS MISSION');
       }
-    } else if (result === 'duplicate') {
-      setError('ALIAS ALREADY IN USE. Please secure another designation.');
-      setIsSubmitting(false);
-    } else if (result === 'full') {
-      setError('Sala llena (Máximo 16 operativos)');
-      setIsSubmitting(false);
-    } else {
-      setError('Connection failed. Room may not exist or is already full.');
+      // ------------------------------------------------------------------
+
+      // 2. Si pasó el candado, recién ahí hacemos el insert
+      const { error: joinError } = await supabase.from('players').insert({
+        room_id: roomData.id,
+        nickname: nickname.trim(),
+        role: 'PENDING',
+        is_host: false
+      });
+
+      if (joinError) throw joinError;
+
+      // Redirigir a la sala...
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
       setIsSubmitting(false);
     }
   };
