@@ -1553,7 +1553,7 @@ function PhaseResults({ isTeacher, roomId, players }: { isTeacher: boolean, room
         <p className="font-jetbrains text-xs tracking-[0.4em] text-white/70 mb-2">ROUNDS PLAYED: {gameState?.current_round ?? 0}</p>
         <h3 className="text-whapigen-cyan font-jetbrains tracking-[0.3em] text-sm uppercase">MISSION CONCLUDED</h3>
         <h2 className={`text-6xl font-sora font-black uppercase tracking-tighter drop-shadow-md ${impostorWon ? 'text-whapigen-red drop-shadow-neon-red' : 'text-whapigen-green drop-shadow-neon-green'}`}>
-          {impostorWon ? 'IMPOSTOR WINS' : 'FRIENDS WINS'}
+          {impostorWon ? 'IMPOSTOR WINS' : 'PLAYERS WINS'}
         </h2>
         <p className="text-white/70 font-jetbrains text-lg tracking-[0.4em] uppercase pt-4 opacity-70">
           The Impostor was {impostor?.nickname}
@@ -1563,16 +1563,16 @@ function PhaseResults({ isTeacher, roomId, players }: { isTeacher: boolean, room
       {/* Scoreboard */}
       <div className="bg-black/60 backdrop-blur-xl border border-white/10 rounded-[40px] p-8 md:p-16 mt-8 md:mt-12 shadow-[0_40px_100px_rgba(0,0,0,0.5)] w-full max-w-2xl transform hover:scale-[1.02] transition-transform duration-700 shadow-neon-pulse-cyan">
         <h3 className="text-white font-black font-jetbrains tracking-[0.8em] text-lg mb-3 md:mb-3 border-b border-white/5 pb-6 uppercase ml-[0.8em] text-center">Scoreboard</h3>
-        <div className="flex flex-col gap-4 md:gap-5">
+        <div className="flex flex-col gap-2">
           {[...players].filter((p: any) => !p.is_host).sort((a: any, b: any) => (b.score || 0) - (a.score || 0)).map((p: any) => (
             <div key={p.id} className="flex justify-between items-center bg-white/[0.03] p-6 rounded-[30px] border border-white/5 transition-all hover:bg-white/[0.06] hover:border-whapigen-cyan/20 group/row group relative overflow-x-hidden">
               <div className="absolute inset-0 bg-gradient-to-r from-whapigen-cyan/5 to-transparent opacity-0 group-hover/row:opacity-100 transition-opacity"></div>
-              <div className="flex items-center gap-6 relative z-10">
+              <div className="flex items-center gap-2 md:gap-6 relative z-10">
                 <div className={`w-3 h-3 rounded-full ${p.is_eliminated ? 'bg-gray-800' : 'bg-whapigen-cyan shadow-neon-cyan'}`}></div>
                 <span className={`font-sora tracking-tighter text-xl uppercase ${p.is_eliminated ? 'text-white/20 line-through' : 'text-white font-black'}`}>{p.nickname}</span>
               </div>
               <div className="relative z-10">
-                <span className="font-jetbrains font-black text-white text-[11px] tracking-widest px-5 py-2 bg-white/5 rounded-full border border-white/5 group-hover/row:bg-whapigen-cyan group-hover/row:text-black transition-all group-hover/row:scale-110">
+                <span className="font-jetbrains font-black text-white text-[12px] md:text-[18px] tracking-widest px-5 py-2 bg-white/5 rounded-full border border-white/5 group-hover/row:bg-whapigen-cyan group-hover/row:text-black transition-all group-hover/row:scale-110">
                   {p.score || 0} PTS
                 </span>
               </div>

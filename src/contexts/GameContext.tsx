@@ -96,52 +96,26 @@ export function GameProvider({ children }: { children: ReactNode }) {
     const { data: roomData, error: roomError } = await supabase
       .from('rooms')
       .select('*')
-      .eq('code', code)
+      .eq('id', code)
       .single();
 
     if (roomError || !roomData) return 'error';
 
-    // 1.5 Stale-row check: if a matching nickname exists, check its age.
-    // Ghost rows (>30s old) from kicked/disconnected players are deleted.
-    // Fresh rows (<30s old) indicate an active player; reject with 'duplicate'.
-    const { data: dupCheck } = await supabase
+    // 1.5 Fetch the player that JoinScreen just inserted
+    const { data: playerData, error: playerError } = await supabase
       .from('players')
-      .select('*')
+      .select('id')
       .eq('room_id', roomData.id)
-      .ilike('nickname', nickname)
+      .eq('nickname', nickname)
       .maybeSingle();
 
-    if (dupCheck) {
-      const createdAt = new Date(dupCheck.created_at).getTime();
-      const ageSeconds = (Date.now() - createdAt) / 1000;
-      if (ageSeconds < 30) return 'duplicate';
-      await supabase.from('players').delete().eq('id', dupCheck.id);
-    }
+    if (playerError || !playerData) return 'error';
 
     // 1.8 Check Mid-Game Intrusion
     const { data: stateData } = await supabase.from('game_state').select('phase').eq('room_id', roomData.id).maybeSingle();
     const isMidGame = stateData && stateData.phase !== 'LOBBY';
 
-    // 1.9 Check Room Capacity (Limit: 16 students)
-    const { count, error: countError } = await supabase
-      .from('players')
-      .select('*', { count: 'exact', head: true })
-      .eq('room_id', roomData.id)
-      .eq('is_host', false);
-
-    if (countError) return 'error';
-    if (count !== null && count >= 16) return 'full';
-
-    // 2. Add Player
-    const { data: playerData, error: playerError } = await supabase
-      .from('players')
-      .insert([{ room_id: roomData.id, nickname, is_host: false, is_eliminated: !!isMidGame }])
-      .select()
-      .single();
-
-    if (playerError || !playerData) return 'error';
-
-    // 3. Set Auth (also writes to sessionStorage via setStudentData)
+    // 2. Set Auth (also writes to sessionStorage via setStudentData)
     setStudentData({ nickname, roomId: roomData.id, playerId: playerData.id });
     setActiveRoomId(roomData.id);
 

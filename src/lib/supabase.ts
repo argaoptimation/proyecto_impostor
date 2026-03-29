@@ -12,9 +12,10 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 export async function getServerTimeOffset(): Promise<number> {
   try {
     const t0 = Date.now();
-    const res = await fetch(`${supabaseUrl}/rest/v1/`, {
+    // Apuntamos a 'rooms?limit=1' en lugar de dejar la ruta raíz vacía
+    const res = await fetch(`${supabaseUrl}/rest/v1/rooms?limit=1`, {
       method: 'HEAD',
-      headers: { apikey: supabaseAnonKey }
+      headers: { apikey: supabaseAnonKey, 'Authorization': `Bearer ${supabaseAnonKey}` }
     });
     const dateHeader = res.headers.get('date');
     if (dateHeader) {

@@ -21,43 +21,73 @@ export default function JoinScreen() {
     setError(null);
 
     try {
-      // 1. Primero buscamos el ID de la sala usando el código
+      const cleanNickname = nickname.trim().toUpperCase();
+      const cleanRoomCode = roomCode.trim().toUpperCase();
+
+      // 1. Buscamos la sala usando el nombre real de la columna: 'code'
       const { data: roomData, error: roomError } = await supabase
         .from('rooms')
-        .select('id, status')
-        .eq('room_code', roomCode)
+        .select('id')
+        .eq('code', cleanRoomCode)
         .single();
 
-      // FIX ERROR: Si no encuentra la sala, el error es el CÓDIGO, no el nombre.
-      if (roomError || !roomData) throw new Error('ACCESS COORDINATE NOT FOUND');
-      if (roomData.status !== 'LOBBY') throw new Error('MISSION ALREADY IN PROGRESS');
+      if (roomError || !roomData) {
+        console.error("Error de Supabase:", roomError);
+        throw new Error('CÓDIGO DE SALA INVÁLIDO');
+      }
 
-      // 2. Validar Nickname (El candado)
+      // 2. RESTRICCIÓN: Límite de 16 jugadores
+      const { count, error: countError } = await supabase
+        .from('players')
+        .select('*', { count: 'exact', head: true })
+        .eq('room_id', roomData.id)
+        .eq('is_host', false);
+
+      if (countError) throw countError;
+      if (count !== null && count >= 16) throw new Error('LA SALA ESTÁ LLENA (16/16)');
+
+      // 3. Validar Nickname (Candado anti-clones y LIMPIEZA DE FANTASMAS)
       const { data: existingPlayer } = await supabase
         .from('players')
-        .select('id')
+        .select('id, created_at')
         .eq('room_id', roomData.id)
-        .eq('nickname', nickname.trim())
+        .eq('nickname', cleanNickname)
         .maybeSingle();
 
       if (existingPlayer) {
-        throw new Error('NICKNAME ALREADY TAKEN IN THIS ROOM');
+        const createdAt = new Date(existingPlayer.created_at).getTime();
+        const ageSeconds = (Date.now() - createdAt) / 1000;
+
+        if (ageSeconds < 30) {
+          // ACÁ PONEMOS EL MENSAJE LLAMATIVO 1
+          throw new Error('⚠️ DUPLICATE IDENTITY: PLAYER ALREADY IN THE ROOM');
+        } else {
+          await supabase.from('players').delete().eq('id', existingPlayer.id);
+        }
       }
 
-      // 3. Insertar Jugador
+      // 4. Insertar Jugador
       const { error: joinError } = await supabase.from('players').insert({
         room_id: roomData.id,
-        nickname: nickname.trim(),
-        role: 'PENDING',
+        nickname: cleanNickname,
         is_host: false
       });
 
+      if (joinError) {
+        // INTERCEPTAMOS EL ERROR FEO DE LA BASE DE DATOS
+        if (joinError.message.includes('duplicate') || joinError.code === '23505') {
+          // ACÁ PONEMOS EL MENSAJE LLAMATIVO 2 (El mismo para mantener coherencia)
+          throw new Error('⚠️ DUPLICATE IDENTITY: PLAYER ALREADY IN THE ROOM');
+        }
+        // Si es otro tipo de error, lo dejamos pasar
+        throw joinError;
+      }
+
       if (joinError) throw joinError;
 
-      // 4. ¡LA CLAVE! Redirigir y avisar al Contexto
-      // Esto es lo que nos faltaba para que "entre" de verdad
-      joinRoom(roomData.id, nickname.trim());
-      navigate(`/room/${roomCode}`);
+      // 5. Redirigir (CON EL AWAIT QUE FALTABA PARA EVITAR EL BUG DEL PARPADEO)
+      await joinRoom(roomData.id, cleanNickname);
+      navigate(`/game/${roomData.id}`);
 
     } catch (err: any) {
       setError(err.message);
