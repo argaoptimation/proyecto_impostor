@@ -192,6 +192,23 @@ export default function PlayRoom() {
     }
   }, [players, loading, isTeacher, studentData?.playerId, studentData?.nickname, setStudentData]);
 
+  // ── Effect: Cleanup ONLY on Hard Tab Close ──
+  useEffect(() => {
+    if (!studentData?.playerId || isTeacher) return;
+
+    const handleTabClose = () => {
+      // Disparo de gracia solo cuando el navegador se muere
+      supabase.from('players').delete().eq('id', studentData.playerId).then();
+    };
+
+    window.addEventListener('beforeunload', handleTabClose);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleTabClose);
+      // ACÁ ESTABA EL ERROR: ya NO llamamos a handleTabClose() acá.
+    };
+  }, [studentData?.playerId, isTeacher]);
+
   // ── Effect: FIX 2 — Mid-Game Global Abort ──
   // Single-shot guard: once we push LOBBY, we don't fire again until phase changes.
   const isAbortingRef = useRef(false);
