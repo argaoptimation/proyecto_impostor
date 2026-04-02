@@ -1592,22 +1592,45 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
 // ---------------- RESULTS PHASE ----------------
 function PhaseResults({ isTeacher, roomId, players }: { isTeacher: boolean, roomId: string, players: any[] }) {
   const { gameState } = useGame();
-  // Check if Natives or Impostor won
-  const impostor = players.find((p: any) => p.role === 'IMPOSTOR');
-  const aliveNatives = players.filter((p: any) => p.role !== 'IMPOSTOR' && !p.is_eliminated && !p.is_host);
 
-  const impostorWon = aliveNatives.length <= 1;
+  // 1. Encontrar a TODOS los impostores (pueden ser 1, 2 o 3)
+  const allImpostors = players
+    .filter((p: any) => p.role === 'IMPOSTOR')
+    .sort((a: any, b: any) => a.nickname.localeCompare(b.nickname));
+
+  // 2. Contamos vivos de cada bando
+  const aliveImpostorsCount = allImpostors.filter((p: any) => !p.is_eliminated).length;
+  const aliveNativesCount = players.filter((p: any) =>
+    p.role !== 'IMPOSTOR' && !p.is_eliminated && !p.is_host
+  ).length;
+
+  // 3. Lógica de victoria: El impostor gana si:
+  // - Hay al menos 1 vivo Y (Los nativos son iguales/menos que los impostores vivos)
+  // - O si hay al menos 1 vivo Y ya se completó la ronda máxima (Supervivencia)
+  const currentRound = gameState?.current_round ?? 0;
+  const maxRounds = gameState?.max_rounds ?? 3;
+
+  const impostorWon = aliveImpostorsCount > 0 && (
+    aliveNativesCount <= aliveImpostorsCount ||
+    currentRound >= maxRounds
+  );
+
+  // 4. Adaptar textos dinámicos según cantidad de impostores
+  const impostorNames = allImpostors.map((imp: any) => imp.nickname).join(' & ');
+  const isPlural = allImpostors.length > 1;
+  const impostorText = isPlural ? `The Impostors were ${impostorNames}` : `The Impostor was ${impostorNames}`;
+  const titleText = impostorWon ? (isPlural ? 'IMPOSTORS WIN' : 'IMPOSTOR WINS') : 'PLAYERS WIN';
 
   return (
     <div className="w-full max-w-2xl text-center space-y-12 pt-8 md:pt-48 animate-in zoom-in-50 duration-700 min-h-screen">
       <div className="space-y-6 flex flex-col items-center">
-        <p className="font-jetbrains text-xs tracking-[0.4em] text-white/70 mb-2">ROUNDS PLAYED: {gameState?.current_round ?? 0}</p>
+        <p className="font-jetbrains text-xs tracking-[0.4em] text-white/70 mb-2">ROUNDS PLAYED: {currentRound}</p>
         <h3 className="text-whapigen-cyan font-jetbrains tracking-[0.3em] text-sm uppercase">MISSION CONCLUDED</h3>
         <h2 className={`text-6xl font-sora font-black uppercase tracking-tighter drop-shadow-md ${impostorWon ? 'text-whapigen-red drop-shadow-neon-red' : 'text-whapigen-green drop-shadow-neon-green'}`}>
-          {impostorWon ? 'IMPOSTOR WINS' : 'PLAYERS WINS'}
+          {titleText}
         </h2>
         <p className="text-white/70 font-jetbrains text-lg tracking-[0.4em] uppercase pt-4 opacity-70">
-          The Impostor was {impostor?.nickname}
+          {impostorText}
         </p>
       </div>
 
