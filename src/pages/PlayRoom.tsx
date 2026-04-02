@@ -156,6 +156,35 @@ export default function PlayRoom() {
     };
   }, [studentData?.playerId, isTeacher, navigate, setStudentData]);
 
+  // ── Effect: THE REAPER (Teacher Only) ──
+  // El profesor limpia a los jugadores inactivos, con tolerancia dinámica según la fase
+  useEffect(() => {
+    if (!isTeacher || !roomId || !gameState?.phase) return;
+
+    const reaperInterval = setInterval(async () => {
+      // Tolerancia: 3 minutos (180,000 ms) en el LOBBY, 30 segundos (30,000 ms) en MISIÓN
+      const gracePeriod = gameState.phase === 'LOBBY' ? 120000 : 30000;
+      const cutoffTime = new Date(Date.now() - gracePeriod).toISOString();
+
+      // Buscamos jugadores que se hayan quedado sin latido más allá del límite
+      const { data: ghosts } = await supabase
+        .from('players')
+        .select('id, nickname')
+        .eq('room_id', roomId)
+        .eq('is_host', false)
+        .lt('last_seen', cutoffTime);
+
+      if (ghosts && ghosts.length > 0) {
+        const ghostIds = ghosts.map(g => g.id);
+        console.warn(`💀 REAPER: Eliminando fantasmas (Tolerancia: ${gracePeriod / 1000}s) ->`, ghosts.map(g => g.nickname));
+
+        await supabase.from('players').delete().in('id', ghostIds);
+      }
+    }, 15000); // El profesor sigue revisando cada 15 segundos
+
+    return () => clearInterval(reaperInterval);
+  }, [isTeacher, roomId, gameState?.phase]);
+
   // ── Effect: LOBBY ABORT WATCHER (REMOVED) ──
   // The ABORT logic is now handled exclusively by the single-shot isAbortingRef watcher below.  // ── Effect: ZOMBIE SESSION DETECTOR ──
   // Cross-references the student's local session against the live players list.
@@ -192,20 +221,25 @@ export default function PlayRoom() {
     }
   }, [players, loading, isTeacher, studentData?.playerId, studentData?.nickname, setStudentData]);
 
-  // ── Effect: Cleanup ONLY on Hard Tab Close ──
+  // ── Effect: Cleanup ONLY on Hard Tab Close (PC & Mobile) ──
   useEffect(() => {
     if (!studentData?.playerId || isTeacher) return;
 
     const handleTabClose = () => {
-      // Disparo de gracia solo cuando el navegador se muere
+      // Disparo de gracia cuando el navegador se muere (PC o Celular)
       supabase.from('players').delete().eq('id', studentData.playerId).then();
     };
 
+    // Para PC
     window.addEventListener('beforeunload', handleTabClose);
+    // Para Móviles (iOS/Android)
+    window.addEventListener('pagehide', handleTabClose);
+    window.addEventListener('unload', handleTabClose);
 
     return () => {
       window.removeEventListener('beforeunload', handleTabClose);
-      // ACÁ ESTABA EL ERROR: ya NO llamamos a handleTabClose() acá.
+      window.removeEventListener('pagehide', handleTabClose);
+      window.removeEventListener('unload', handleTabClose);
     };
   }, [studentData?.playerId, isTeacher]);
 
