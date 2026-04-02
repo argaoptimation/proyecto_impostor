@@ -259,6 +259,34 @@ export default function PlayRoom() {
     if (aliveCount === 0) return;
 
     if (!isAbortingRef.current) {
+      // 0. NUEVA CONDICIÓN: Verificar si los impostores salieron de la sala (Expulsión/Desconexión)
+      const totalImpostorsInRoom = activePlayers.filter(p => p.role === 'IMPOSTOR').length;
+
+      if (totalImpostorsInRoom === 0) {
+        isAbortingRef.current = true;
+        if (isTeacher) {
+          console.warn('📝 DB WRITE - Cambiando game_state a LOBBY (Impostor abandonó/fue expulsado)');
+          sessionStorage.setItem('lobby_error', 'MISSION ABORTED: NO LIVING IMPOSTORS');
+
+          // AGREGAMOS EL .then() PARA EJECUTAR LA QUERY
+          supabase.from('game_state').update({
+            phase: 'LOBBY',
+            current_turn_index: 0,
+            current_turn_player_id: null,
+            turn_started_at: null,
+            is_paused: false,
+            secret_word: null
+          }).eq('room_id', room.id).then();
+
+          activePlayers.forEach(p =>
+            // AGREGAMOS EL .then() PARA EJECUTAR LA QUERY
+            supabase.from('players').update({ is_eliminated: false, turn_order: null }).eq('id', p.id).then()
+          );
+        }
+        return;
+      }
+
+      // Si pasamos el filtro anterior, significa que los impostores siguen en la sala (vivos o muertos)
       const impostorsAlive = alivePlayersList.filter(p => p.role === 'IMPOSTOR').length;
       const nativesAlive = aliveCount - impostorsAlive;
 
@@ -267,7 +295,8 @@ export default function PlayRoom() {
         isAbortingRef.current = true;
         if (isTeacher) {
           console.warn('📝 DB WRITE - Cambiando game_state a RESULTS (Victoria detectada globalmente)');
-          supabase.from('game_state').update({ phase: 'RESULTS' }).eq('room_id', room.id);
+          // AGREGAMOS EL .then() PARA EJECUTAR LA QUERY
+          supabase.from('game_state').update({ phase: 'RESULTS' }).eq('room_id', room.id).then();
         }
         return;
       }
@@ -277,6 +306,9 @@ export default function PlayRoom() {
         isAbortingRef.current = true;
         if (isTeacher) {
           console.warn('📝 DB WRITE - Cambiando game_state a LOBBY (Abortando por falta de jugadores vivos)');
+          sessionStorage.setItem('lobby_error', 'MISSION ABORTED: INSUFFICIENT PLAYERS ALIVE');
+
+          // AGREGAMOS EL .then() PARA EJECUTAR LA QUERY
           supabase.from('game_state').update({
             phase: 'LOBBY',
             current_turn_index: 0,
@@ -284,15 +316,16 @@ export default function PlayRoom() {
             turn_started_at: null,
             is_paused: false,
             secret_word: null
-          }).eq('room_id', room.id);
+          }).eq('room_id', room.id).then();
 
           activePlayers.forEach(p =>
-            supabase.from('players').update({ is_eliminated: false, turn_order: null }).eq('id', p.id)
+            // AGREGAMOS EL .then() PARA EJECUTAR LA QUERY
+            supabase.from('players').update({ is_eliminated: false, turn_order: null }).eq('id', p.id).then()
           );
         }
       }
     }
-  }, [activePlayers.length, gameState?.phase, isTeacher, room?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activePlayers.length, gameState?.phase, isTeacher, room?.id]);
 
   // ══════════════════════════════════════════════════════════════════════════
   // SECTION 2: CONDITIONAL RETURNS — safe because all hooks are above
@@ -346,28 +379,23 @@ export default function PlayRoom() {
 
   const handleEndSession = async () => {
     if (isTeacher) {
-      // 1. Reset phase to LOBBY so all clients see the transition immediately
+      console.warn('📝 ABORT MISSION MANUAL: Cancelando partida y volviendo al LOBBY');
+
+      // 1. Reiniciamos el estado del juego al Lobby
       await supabase.from('game_state').update({
         phase: 'LOBBY',
         current_turn_index: 0,
-        is_paused: false
+        current_turn_player_id: null,
+        turn_started_at: null,
+        is_paused: false,
+        secret_word: null
       }).eq('room_id', room.id);
 
-      // 2. Broadcast SESSION_ABORT so all students clear session and redirect
-      const abortChannel = supabase.channel(`room:${room.id}:abort`);
-      await abortChannel.subscribe();
-      await abortChannel.send({
-        type: 'broadcast',
-        event: 'SESSION_ABORT',
-        payload: { message: 'SESSION TERMINATED BY COORDINATOR' }
-      });
-      supabase.removeChannel(abortChannel);
-
-      // 3. Clean up DB resources
-      await supabase.from('players').delete().eq('room_id', room.id);
-      await supabase.from('game_state').delete().eq('room_id', room.id);
-      await supabase.from('rooms').delete().eq('id', room.id);
-      navigate('/admin/dashboard');
+      // 2. Revivimos a todos los jugadores y limpiamos el orden
+      const updates = activePlayers.map(p =>
+        supabase.from('players').update({ is_eliminated: false, turn_order: null }).eq('id', p.id)
+      );
+      await Promise.all(updates);
     }
   };
 
@@ -526,6 +554,14 @@ export default function PlayRoom() {
 function PhaseLobby({ isTeacher, roomId, players, roomLevel }: { isTeacher: boolean, roomId: string, players: any[], roomLevel: string }) {
   const { refreshPlayers } = useGame(); // Keep hook call alive for context subscription
   const [startError, setStartError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const errorMsg = sessionStorage.getItem('lobby_error');
+    if (errorMsg) {
+      setStartError(errorMsg);
+      sessionStorage.removeItem('lobby_error'); // Lo limpiamos para que no quede pegado
+    }
+  }, []);
 
   // ── canStart: disabled if < 3 players ──
   const canStart = (players?.length || 0) >= 3;
@@ -1052,11 +1088,15 @@ function PhaseSpeaking({ isTeacher, room, gameState, players }: { isTeacher: boo
   }, [gameState.is_paused]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleNextTurn = async () => {
-    if (gameState.phase === 'LOBBY' || players.filter((p: any) => !p.is_host).length < 3) {
-      console.warn('⛔ handleNextTurn BLOQUEADO: Fase de Lobby activa o faltan jugadores.');
-      return;
+    const hasImpostors = players.some((p: any) => p.role === 'IMPOSTOR' && !p.is_host);
+    const validPlayersCount = players.filter((p: any) => !p.is_host && !p.is_eliminated).length;
+
+    // CANDADO ABSOLUTO
+    if (gameState.phase === 'LOBBY' || validPlayersCount < 3 || !hasImpostors) {
+      console.warn('⛔ handleNextTurn BLOQUEADO: Faltan jugadores o el Impostor abandonó la sala.');
+      return; // <--- ESTO ES LO QUE FALTABA PARA FRENAR LA EJECUCIÓN
     }
-    // 1. FIND ALL CANDIDATES: Alive players with turn_order > current
+
     const nextCandidates = players
       .filter((p: any) => !p.is_eliminated && !p.is_host && (p.turn_order || 0) > gameState.current_turn_index)
       .sort((a, b) => (a.turn_order || 0) - (b.turn_order || 0));
@@ -1072,8 +1112,6 @@ function PhaseSpeaking({ isTeacher, room, gameState, players }: { isTeacher: boo
         is_paused: false
       }).eq('room_id', room.id);
     } else {
-      // ── PRE-VOTING WIPE: delete ALL votes for this room before entering voting ──
-      // This prevents 'auto-vote' bugs caused by stale rows from previous rounds.
       await supabase.from('votes').delete().eq('room_id', room.id);
       console.warn('📝 DB WRITE - Cambiando game_state:', { nuevaFase: 'VOTING', disparadoPor: 'handleNextTurn (Ronda Terminada)' });
       await supabase.from('game_state').update({
@@ -1367,9 +1405,12 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
   };
 
   const calculateResults = async () => {
-    if (gameState.phase === 'LOBBY' || players.filter((p: any) => !p.is_host).length < 3) {
-      console.warn('⛔ calculateResults BLOQUEADO: Fase de Lobby activa o faltan jugadores.');
-      return;
+    const hasImpostors = players.some((p: any) => p.role === 'IMPOSTOR' && !p.is_host);
+
+    // CANDADO ABSOLUTO
+    if (gameState.phase === 'LOBBY' || players.filter((p: any) => !p.is_host).length < 3 || !hasImpostors) {
+      console.warn('⛔ calculateResults BLOQUEADO: Faltan jugadores o el Impostor abandonó la sala.');
+      return; // <--- VITAL
     }
 
     // --- CANDADO 1: Mínimo de 3 jugadores vivos ---
