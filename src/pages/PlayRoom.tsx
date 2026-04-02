@@ -584,15 +584,23 @@ function PhaseLobby({ isTeacher, roomId, players, roomLevel }: { isTeacher: bool
     setStartError(null);
 
 
-    // ── SCALABLE IMPOSTOR COUNT ──
+    // ── SCALABLE IMPOSTOR COUNT & ROUNDS ──
     const n = livePlayers.length;
     let impostorCount = 1;
-    if (n >= 12) impostorCount = 3;
-    else if (n >= 6) impostorCount = 2;
+    let maxRounds = 3; // Rondas por defecto para 1 impostor
+
+    if (n >= 12) {
+      impostorCount = 3;
+      maxRounds = 5; // <--- 4 rondas para 3 impostores (Fácil de cambiar a 5)
+    } else if (n >= 6) {
+      impostorCount = 2;
+      maxRounds = 4; // <--- Si a futuro querés 4 rondas para 2 impostores, lo cambiás acá nomás
+    }
+
     // Safety: never assign more impostors than (playerCount - 1)
     impostorCount = Math.min(impostorCount, n - 1);
 
-    console.log(`[Role Allocator] Allocating ${impostorCount} IMPOSTOR(s) for ${n} player(s)`);
+    console.log(`[Role Allocator] Allocating ${impostorCount} IMPOSTOR(s) for ${n} player(s). Rounds: ${maxRounds}`);
 
     // ── ANTI-REPEAT RING: track how many times each player has been impostor ──
     // Stored as a JSON map { [playerId]: consecutiveRoundCount } in localStorage.
@@ -650,7 +658,7 @@ function PhaseLobby({ isTeacher, roomId, players, roomLevel }: { isTeacher: bool
       current_turn_player_id: firstPlayer.id,
       current_turn_index: 0,
       current_round: 1,
-      max_rounds: 3
+      max_rounds: maxRounds // <--- ACÁ LE PASAMOS LA VARIABLE DINÁMICA
     }).eq('room_id', roomId);
   };
 
