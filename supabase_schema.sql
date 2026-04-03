@@ -31,7 +31,7 @@ create table public.players (
     is_eliminated boolean default false,
     score int default 0,
     last_seen timestamp with time zone default timezone('utc'::text, now()),
-    joined_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null,
     unique(room_id, nickname)
 );
 

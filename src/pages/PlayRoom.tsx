@@ -56,15 +56,30 @@ export default function PlayRoom() {
       });
   }, [user, roomId]);
 
-  // ── Effect: Auth priority guard ──
+  // ── Effect: Auth priority guard (CON CANDADO ANTI-FANTASMAS F5) ──
   useEffect(() => {
     if (authLoading) return;
     if (isConfirmedHost) return;
     if (isTeacher) return;
     if (user) return;
-    if (isStudent) return;
+
+    if (isStudent && studentData?.playerId) {
+      // Candado extra: Si el alumno recargó (F5) y su sesión local dice que está vivo, 
+      // le preguntamos a la base de datos si es verdad.
+      supabase.from('players').select('id').eq('id', studentData.playerId).maybeSingle()
+        .then(({ data }) => {
+          if (!data) {
+            console.warn('🛑 Sesión huérfana detectada (F5). Redirigiendo al Join.');
+            sessionStorage.clear();
+            setStudentData(null);
+            navigate('/join');
+          }
+        });
+      return; // Si todo está bien, se queda en la sala.
+    }
+
     navigate('/join');
-  }, [authLoading, isConfirmedHost, user, room, isTeacher, isStudent, navigate]);
+  }, [authLoading, isConfirmedHost, user, room, isTeacher, isStudent, studentData, navigate, setStudentData]);
 
   // ── Effect: Auto-Kick listener ──
   useEffect(() => {
@@ -236,12 +251,10 @@ export default function PlayRoom() {
     window.addEventListener('beforeunload', handleTabClose);
     // Para Móviles (iOS/Android)
     window.addEventListener('pagehide', handleTabClose);
-    window.addEventListener('unload', handleTabClose);
 
     return () => {
       window.removeEventListener('beforeunload', handleTabClose);
       window.removeEventListener('pagehide', handleTabClose);
-      window.removeEventListener('unload', handleTabClose);
     };
   }, [studentData?.playerId, isTeacher]);
 
