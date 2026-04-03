@@ -4,7 +4,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useGame } from '../contexts/GameContext';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import { Users, EyeOff, Target, Crosshair, LogOut, Home, X, Loader2, Lock, Shield, Eye, MessageSquare, ShieldCheck } from 'lucide-react';
+import { Users, EyeOff, Target, Crosshair, LogOut, Home, X, Loader2, Lock, Shield, Eye, MessageSquare, ShieldCheck, QrCode, MessageCircle } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import gsap from 'gsap';
 import { getRandomWordEntry, getHintsForWord } from '../data/words';
 import { CyberRain } from '../components/ui/CyberRain';
@@ -23,6 +24,7 @@ export default function PlayRoom() {
 
   // ── State ──
   const [isConfirmedHost, setIsConfirmedHost] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
 
   // ── Ref: GHOST-PURGE IMMUNIZER ──
   // Tracks whether this client's player has ever appeared in the live list.
@@ -437,18 +439,28 @@ export default function PlayRoom() {
             <span className="text-header-premium text-lg font-black tracking-[0.2em] whitespace-nowrap">CIL LENGUAS</span>
             <div className="w-1 h-6 bg-gradient-to-b from-whapigen-cyan to-purple-600 opacity-30"></div>
           </div>
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-2">
             <h1 className="text-header-premium text-2xl tracking-[0.1em]">
               {room.code}
             </h1>
-            <div className="flex items-center gap-2">
+
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="bg-purple-900/40 backdrop-blur-xl border border-purple-500/30 text-gray-300 font-jetbrains text-xs px-3 py-1 rounded-full uppercase tracking-widest shadow-[0_0_15px_rgba(147,51,234,0.3)]">
                 LEVEL {room.level}
               </span>
-              <span className="text-white/20 font-jetbrains text-[10px] tracking-widest px-1"></span>
               <span className="bg-cyan-900/40 backdrop-blur-xl border border-cyan-500/30 text-gray-300 font-jetbrains text-xs px-3 py-1 rounded-full uppercase tracking-widest shadow-[0_0_15px_rgba(0,240,255,0.2)]">
                 {room.turn_duration}S TURNS
               </span>
+
+              <button
+                onClick={() => setShowShareModal(true)}
+                className="flex items-center justify-center gap-2 px-3 py-1 bg-whapigen-cyan/10 border border-whapigen-cyan/40 text-whapigen-cyan hover:bg-whapigen-cyan hover:text-black rounded-full transition-all duration-300 shadow-[0_0_15px_rgba(0,240,255,0.1)] group whitespace-nowrap cursor-pointer"
+              >
+                <QrCode className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" />
+                <span className="font-jetbrains font-black text-[10px] tracking-[0.2em] uppercase mt-0.5">
+                  SHARE
+                </span>
+              </button>
             </div>
           </div>
         </div>
@@ -546,6 +558,47 @@ export default function PlayRoom() {
           POWERED BY <span className="bg-gradient-to-r from-whapigen-cyan to-purple-500 bg-clip-text text-transparent italic">WHAPIGEN</span> // AI AUTOMATION SYSTEMS
         </p>
       </footer>
+
+      {/* SHARE MODAL */}
+      {showShareModal && createPortal((
+        <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/80 backdrop-blur-md px-4 animate-in fade-in duration-300 pointer-events-auto">
+          <div className="bg-[#050505] border border-whapigen-cyan/30 rounded-[30px] p-10 max-w-sm w-full shadow-[0_0_60px_rgba(0,240,255,0.15)] animate-in zoom-in-95 duration-500 relative flex flex-col items-center">
+            <button
+              onClick={() => setShowShareModal(false)}
+              className="absolute top-6 right-6 text-white/30 hover:text-whapigen-red transition-colors"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            <h3 className="text-whapigen-cyan font-sora font-black text-xl mb-1 text-center uppercase tracking-widest drop-shadow-neon-cyan">
+              MISSION ACCESS
+            </h3>
+            <p className="font-jetbrains text-[11px] text-white/50 uppercase tracking-[0.4em] mb-8 text-center flex items-center gap-2">
+              CODE: <span className="text-white font-black text-sm drop-shadow-md">{room.code}</span>
+            </p>
+
+            <div className="bg-white p-5 rounded-2xl mb-10 shadow-xl border-4 border-white/10 ring-1 ring-whapigen-cyan/20">
+              <QRCodeSVG
+                value={`${window.location.origin}/join?code=${room.code}`}
+                size={220}
+                level="H"
+                includeMargin={false}
+              />
+            </div>
+
+            <button
+              onClick={() => {
+                const url = `${window.location.origin}/join?code=${room.code}`;
+                const text = `🕵️ MISSION INITIATION:\nJoin the secure room to play The Impostor!\n\nCode: *${room.code}*\nLink: ${url}`;
+                window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
+              }}
+              className="w-full h-16 bg-[#25D366]/10 border border-[#25D366]/30 text-[#25D366] hover:bg-[#25D366] hover:text-black hover:shadow-[0_0_25px_rgba(37,211,102,0.6)] font-jetbrains font-black uppercase tracking-[0.2em] rounded-full transition-all duration-300 flex items-center justify-center gap-4 group/wa"
+            >
+              <MessageCircle className="w-5 h-5 group-hover/wa:scale-110 transition-transform" />
+              <span className="text-xs md:text-sm">SHARE VIA WP</span>
+            </button>
+          </div>
+        </div>
+      ), document.body)}
     </div>
   );
 }

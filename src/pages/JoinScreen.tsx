@@ -8,8 +8,11 @@ import { CyberRain } from '../components/ui/CyberRain';
 import { RainToggle } from '../components/ui/RainToggle';
 
 export default function JoinScreen() {
+  const queryParams = new URLSearchParams(window.location.search);
+  const initialCode = queryParams.get('code') || '';
+
   const [nickname, setNickname] = useState('');
-  const [roomCode, setRoomCode] = useState('');
+  const [roomCode, setRoomCode] = useState(initialCode);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate(); // <-- LO VOLVEMOS A USAR
@@ -145,6 +148,9 @@ export default function JoinScreen() {
               maxLength={12}
               className="w-full bg-[#0a0a0a] border border-purple-500/20 rounded-full py-5 px-6 text-lg text-whapigen-cyan font-jetbrains font-black focus:outline-none focus:border-purple-500 focus:shadow-neon-violet transition-all placeholder:text-whapigen-cyan/10 uppercase tracking-widest text-center"
               disabled={isSubmitting}
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck="false"
             />
           </div>
 
