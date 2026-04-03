@@ -69,7 +69,7 @@ export default function AdminDashboard() {
     // Polling fallback mechanism
     const fetchRoomsFallback = setInterval(() => {
       fetchRooms();
-    }, 2500);
+    }, 10000);
 
     return () => {
       clearInterval(fetchRoomsFallback);

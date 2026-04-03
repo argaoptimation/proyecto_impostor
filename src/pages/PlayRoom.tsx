@@ -411,11 +411,11 @@ export default function PlayRoom() {
       )}
 
       {/* Top Brand Navigation */}
-      <div className="w-full flex justify-between items-center p-6 relative md:absolute md:top-0 z-[60] pointer-events-none">
+      <div className="w-full flex justify-between items-center p-1 relative md:absolute md:top-0 z-[60] pointer-events-none">
 
         <button
           onClick={handleLeave}
-          className="pointer-events-auto flex items-center gap-3 text-gray-400 hover:text-white font-jetbrains text-[10px] uppercase tracking-[0.3em] transition-all bg-black/60 backdrop-blur-xl px-8 py-3 rounded-full border border-white/5 hover:border-purple-500/50 hover:shadow-neon-pulse-violet font-black"
+          className="pointer-events-auto flex items-center gap-2 text-gray-400 hover:text-white font-jetbrains text-[10px] uppercase tracking-[0.3em] transition-all bg-black/60 backdrop-blur-xl px-8 py-3 rounded-full border border-white/5 hover:border-purple-500/50 hover:shadow-neon-pulse-violet font-black"
         >
           {isTeacher ? <><Home className="w-7 h-7 md:w-9 h-9" /> Dashboard</> : <><LogOut className="w-7 h-7 md:w-8 h-8 text-whapigen-red" /> Leave Mission</>}
         </button>
@@ -433,7 +433,7 @@ export default function PlayRoom() {
         </div>
       )}
 
-      <header className="relative md:fixed mt-2 md:top-8 md:left-8 md:right-8 z-30 md:z-[60] flex flex-col md:flex-row justify-between items-center p-4 md:p-6 bg-black/40 backdrop-blur-3xl rounded-3xl md:rounded-full border border-white/10 shadow-[0_20px_60px_rgba(0,0,0,0.5)] mx-4 md:mx-auto max-w-7xl animate-in slide-in-from-top duration-700 gap-4 md:gap-0">
+      <header className="fixed top-16 md:top-6 left-1/2 -translate-x-1/2 w-[95%] md:w-[70%] z-[60] flex flex-col md:flex-row justify-between items-center p-2 md:p-4 bg-black/40 backdrop-blur-3xl rounded-3xl md:rounded-full border border-white/10 shadow-[0_20px_60px_rgba(0,0,0,0.5)] animate-in slide-in-from-top duration-700 gap-4 md:gap-0">
         <div className="flex items-center gap-6">
           <div className="hidden md:flex items-center gap-3">
             <span className="text-header-premium text-lg font-black tracking-[0.2em] whitespace-nowrap">CIL LENGUAS</span>
@@ -718,7 +718,7 @@ function PhaseLobby({ isTeacher, roomId, players, roomLevel }: { isTeacher: bool
   const [showBriefing, setShowBriefing] = useState(false);
 
   return (
-    <div className="relative z-40 md:z-auto w-full max-w-2xl text-center space-y-8 pt-8 md:pt-20 animate-in fade-in duration-500">
+    <div className="relative z-40 md:z-auto w-full max-w-2xl text-center space-y-8 pt-20 animate-in fade-in duration-500">
 
       <div className="mb-8 relative">
         <Target className="w-24 h-24 mx-auto text-whapigen-cyan/20 absolute -top-4 left-1/2 -translate-x-1/2 -rotate-45" />
@@ -1472,14 +1472,6 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
     if (gameState.phase === 'LOBBY' || players.filter((p: any) => !p.is_host).length < 3 || !hasImpostors) {
       console.warn('⛔ calculateResults BLOQUEADO: Faltan jugadores o el Impostor abandonó la sala.');
       return; // <--- VITAL
-    }
-
-    // --- CANDADO 1: Mínimo de 3 jugadores vivos ---
-    // Si ya solo quedan 3, no permitimos eliminaciones para que el juego no se rompa.
-    if (alivePlayers.length <= 3) {
-      console.warn('⚠️ MÍNIMO ALCANZADO: Manteniendo 3 jugadores para estabilidad de la partida.');
-      await processRoundEnd(null);
-      return;
     }
 
     // Traemos los votos frescos de la DB

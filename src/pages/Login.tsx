@@ -1,15 +1,19 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { Terminal, Lock, Mail, Loader2, AlertCircle } from 'lucide-react';
+import { Terminal, Lock, Mail, Loader2, AlertCircle, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { CyberRain } from '../components/ui/CyberRain';
+import { RainToggle } from '../components/ui/RainToggle';
+import { GlitchLogo } from '../components/ui/GlitchLogo';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -29,7 +33,7 @@ export default function Login() {
     });
 
     if (error) {
-      setError(error.message);
+      setError(error.message.toUpperCase());
       setLoading(false);
     } else {
       navigate('/admin/dashboard');
@@ -37,57 +41,108 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4">
-      <div className="mb-12 text-center text-whapigen-cyan">
-        <Lock className="w-12 h-12 mx-auto mb-4 drop-shadow-neon-cyan" />
-        <h1 className="font-jetbrains text-2xl tracking-[0.2em] uppercase">Teacher Access</h1>
+    <div className="min-h-[100dvh] flex flex-col items-center justify-center p-6 relative overflow-hidden bg-[#050505]">
+      {/* Background Elements */}
+      <CyberRain />
+      <RainToggle />
+      <div className="absolute inset-0 bg-digital-grid bg-[length:40px_40px] opacity-[0.02] pointer-events-none"></div>
+
+      {/* Header / Brand */}
+      <div className="mb-12 text-center relative z-10 animate-in fade-in slide-in-from-top duration-700">
+        <GlitchLogo size="md" isStatic={false} className="mb-6 mx-auto" />
+        <h1 className="text-header-premium text-3xl md:text-4xl tracking-[0.1em]">
+          TEACHER ACCESS
+        </h1>
+        <div className="mt-4 flex items-center justify-center gap-4">
+          <div className="h-[1px] w-12 bg-gradient-to-r from-transparent to-whapigen-cyan"></div>
+          <p className="text-whapigen-cyan font-jetbrains tracking-[0.4em] font-black text-[10px] uppercase flex items-center gap-2">
+            <ShieldCheck className="w-3 h-3 animate-pulse" /> COMMAND CENTER
+          </p>
+          <div className="h-[1px] w-12 bg-gradient-to-l from-transparent to-purple-600"></div>
+        </div>
       </div>
 
-      <div className="glass-panel w-full max-w-md p-8 relative">
-        <div className="absolute top-0 left-0 w-full h-1 bg-whapigen-cyan/50"></div>
-        <form onSubmit={handleLogin} className="space-y-6">
-          <div className="space-y-2">
-            <label className="text-whapigen-border font-jetbrains text-xs tracking-wider uppercase flex items-center gap-2">
-              <Mail className="w-4 h-4" /> Valid Email
+      {/* Login Card */}
+      <div className="w-full max-w-md p-10 relative overflow-hidden group bg-black/80 backdrop-blur-2xl border border-white/10 rounded-[30px] shadow-[0_20px_80px_rgba(0,0,0,0.5)] hover:shadow-neon-pulse-cyan transition-all duration-500 animate-in zoom-in-95 duration-700">
+        <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-whapigen-cyan via-purple-600 to-whapigen-cyan opacity-30 group-hover:opacity-100 transition-opacity"></div>
+
+        <form onSubmit={handleLogin} className="space-y-8 relative z-10">
+          {/* Email Input */}
+          <div className="space-y-3">
+            <label className="text-whapigen-cyan font-jetbrains text-[10px] tracking-[0.3em] uppercase font-black flex items-center gap-2 ml-2">
+              <Mail className="w-3.5 h-3.5 text-whapigen-cyan/50" /> ACCESS IDENTITY
             </label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full bg-[#0a0a0a] border border-whapigen-border rounded-none p-3 text-white font-jetbrains focus:border-whapigen-cyan focus:shadow-neon-cyan outline-none transition-all"
-              required
-            />
+            <div className="relative group/input">
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
+                className="w-full bg-black/40 border border-white/10 rounded-2xl py-4 px-6 text-white font-jetbrains text-sm focus:outline-none focus:border-whapigen-cyan/50 focus:shadow-[0_0_20px_rgba(0,240,255,0.1)] transition-all placeholder:text-white/10"
+                placeholder="teacher@whapigen.com"
+                required
+              />
+            </div>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-whapigen-border font-jetbrains text-xs tracking-wider uppercase flex items-center gap-2">
-              <Terminal className="w-4 h-4" /> Password Key
+          {/* Password Input */}
+          <div className="space-y-3">
+            <label className="text-whapigen-cyan font-jetbrains text-[10px] tracking-[0.3em] uppercase font-black flex items-center gap-2 ml-2">
+              <Lock className="w-3.5 h-3.5 text-whapigen-cyan/50" /> PASSWORD
             </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-[#0a0a0a] border border-whapigen-border rounded-none p-3 text-white font-jetbrains focus:border-whapigen-cyan focus:shadow-neon-cyan outline-none transition-all"
-              required
-            />
+            <div className="relative group/input">
+              <input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+                className="w-full bg-black/40 border border-white/10 rounded-2xl py-4 px-6 pr-14 text-white font-jetbrains text-sm focus:outline-none focus:border-whapigen-cyan/50 focus:shadow-[0_0_20px_rgba(0,240,255,0.1)] transition-all placeholder:text-white/10"
+                placeholder="••••••••"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-5 top-1/2 -translate-y-1/2 text-whapigen-cyan/50 hover:text-whapigen-cyan transition-all duration-300"
+                title={showPassword ? "Hide Password" : "Show Password"}
+              >
+                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
+            </div>
           </div>
 
+          {/* Error Message */}
           {error && (
-            <div className="flex items-center gap-2 text-whapigen-red font-jetbrains text-xs bg-whapigen-red/10 p-3 clip-edges border-l-2 border-whapigen-red">
+            <div className="flex items-center gap-3 text-whapigen-red font-jetbrains text-[10px] bg-whapigen-red/5 border border-whapigen-red/20 p-4 rounded-2xl animate-in slide-in-from-left duration-300">
               <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{error}</span>
+              <span className="tracking-widest font-black uppercase">{error}</span>
             </div>
           )}
 
+          {/* Submit Button */}
           <button
             type="submit"
             disabled={loading}
-            className="w-full h-12 bg-whapigen-cyan text-[#050505] font-jetbrains font-bold tracking-widest hover:bg-white hover:shadow-neon-cyan transition-all flex items-center justify-center clip-edges mt-4"
+            className="w-full h-16 bg-gradient-to-r from-whapigen-cyan to-purple-600 hover:from-white hover:to-white text-black font-sora font-black tracking-[0.4em] transition-all rounded-full flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed group/btn hover:shadow-neon-cyan/50 active:scale-95 transition-all outline-none"
           >
-            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'AUTHENTICATE'}
+            {loading ? (
+              <Loader2 className="w-6 h-6 animate-spin" />
+            ) : (
+              <>
+                AUTHENTICATE
+                <Terminal className="w-5 h-5 group-hover/btn:translate-x-1 transition-transform" />
+              </>
+            )}
           </button>
         </form>
       </div>
+
+      {/* Footer Meta */}
+      <footer className="mt-12 text-center relative z-10 opacity-30">
+        <p className="text-[9px] font-jetbrains text-whapigen-cyan tracking-[0.5em] uppercase font-black">
+          SECURE CONNECTION ESTABLISHED // PORT 8080
+        </p>
+      </footer>
     </div>
   );
 }
