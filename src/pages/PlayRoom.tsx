@@ -742,7 +742,7 @@ function PhaseLobby({ isTeacher, roomId, players, roomLevel }: { isTeacher: bool
   const [showBriefing, setShowBriefing] = useState(false);
 
   return (
-    <div className="relative z-40 md:z-auto w-full max-w-2xl text-center space-y-8 pt-20 animate-in fade-in duration-500">
+    <div className="relative z-40 md:z-auto w-full max-w-2xl text-center space-y-8 pt-28 md:pt-56 animate-in fade-in duration-500">
 
       <div className="mb-8 relative">
         <Target className="w-24 h-24 mx-auto text-whapigen-cyan/20 absolute -top-4 left-1/2 -translate-x-1/2 -rotate-45" />
