@@ -10,6 +10,7 @@ import gsap from 'gsap';
 import { getRandomWordEntry, getHintsForWord } from '../data/words';
 import { CyberRain } from '../components/ui/CyberRain';
 import { RainToggle } from '../components/ui/RainToggle';
+import { generateGameWord } from '../lib/gemini';
 
 
 export default function PlayRoom() {
@@ -502,7 +503,7 @@ export default function PlayRoom() {
           role={activePlayers.find(p => p.id === studentData?.playerId)?.role}
           secretWord={gameState.secret_word}
           hintsEnabled={!!room.hints_enabled}
-          hints={getHintsForWord(gameState.secret_word || '', room.level)}
+          hints={gameState.secret_hint ? [gameState.secret_hint, ''] : getHintsForWord(gameState.secret_word || '', room.level)}
           phaseStartedAt={gameState.turn_started_at}
         />
       )}
@@ -703,8 +704,27 @@ function PhaseLobby({ isTeacher, roomId, players, roomLevel }: { isTeacher: bool
     }
     localStorage.setItem(historyKey, JSON.stringify(newHistory));
 
-    // Get the word first before assigning roles individually
-    const wordEntry = getRandomWordEntry(roomLevel);
+    // 1. Buscamos el tema directamente en la base de datos para tenerlo fresco
+    const { data: dbState } = await supabase.from('game_state').select('theme').eq('room_id', roomId).single();
+
+    let finalWord = '???';
+    let finalHint = '';
+
+    // 2. Generamos la palabra con Gemini usando "roomLevel" (que ya está declarado)
+    try {
+      const aiResult = await generateGameWord(roomLevel, dbState?.theme || null);
+      if (aiResult && aiResult.word) {
+        finalWord = aiResult.word;
+        finalHint = aiResult.hint || '';
+      } else {
+        throw new Error("Gemini no devolvió una palabra válida");
+      }
+    } catch (error) {
+      // 3. FALLBACK: Si Gemini falla por red o API Key, el juego sigue con el banco local
+      console.warn("⚠️ Fallo en Gemini, usando banco local...");
+      finalWord = getRandomWordEntry(roomLevel).word;
+      finalHint = '???'; // Pista genérica de emergencia
+    }
 
     // ── DISTRIBUTE ROLES AND INITIAL TURN ORDER ──
     const shuffledForOrder = [...livePlayers].sort(() => Math.random() - 0.5);
@@ -714,7 +734,7 @@ function PhaseLobby({ isTeacher, roomId, players, roomLevel }: { isTeacher: bool
       const isImpostor = impostorIds.has(p.id);
       return supabase.from('players').update({
         role: isImpostor ? 'IMPOSTOR' : 'CITIZEN',
-        secret_word: isImpostor ? null : wordEntry.word,
+        secret_word: isImpostor ? null : finalWord,
         is_eliminated: false,
         turn_order: turnOrderMap.get(p.id)
       }).eq('id', p.id);
@@ -731,7 +751,8 @@ function PhaseLobby({ isTeacher, roomId, players, roomLevel }: { isTeacher: bool
     console.warn('📝 DB WRITE - Cambiando game_state:', { nuevaFase: 'ROLE_REVEAL', disparadoPor: 'startGame' });
     await supabase.from('game_state').update({
       phase: 'ROLE_REVEAL',
-      secret_word: wordEntry.word,
+      secret_word: finalWord,
+      secret_hint: finalHint,
       current_turn_player_id: firstPlayer.id,
       current_turn_index: 0,
       current_round: 1,
@@ -1270,7 +1291,7 @@ function PhaseSpeaking({ isTeacher, room, gameState, players }: { isTeacher: boo
       )}
 
       {isTeacher && (
-        <div className="flex flex-col items-center gap-10 mt-8 w-full">
+        <div className="flex flex-col items-center gap-4 mt-8 w-full">
           <div className="flex gap-8">
             <button
               onClick={togglePause}

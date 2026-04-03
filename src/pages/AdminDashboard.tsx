@@ -54,6 +54,7 @@ export default function AdminDashboard() {
   const [votingDuration, setVotingDuration] = useState(120);
   const [level, setLevel] = useState('A1');
   const [hintsEnabled, setHintsEnabled] = useState(false);
+  const [customTheme, setCustomTheme] = useState('');
 
   useEffect(() => {
     if (!user) return;
@@ -92,10 +93,12 @@ export default function AdminDashboard() {
   };
 
   const createRoom = async () => {
+    if (!user) return;
     setIsCreating(true);
-    const code = Math.floor(1000 + Math.random() * 9000).toString();
 
     try {
+      const code = Math.floor(1000 + Math.random() * 9000).toString();
+
       const { data: roomData, error: roomError } = await supabase
         .from('rooms')
         .insert([{
@@ -116,7 +119,8 @@ export default function AdminDashboard() {
         room_id: roomData.id,
         phase: 'LOBBY',
         current_turn_index: 0,
-        is_paused: false
+        is_paused: false,
+        theme: customTheme.trim() || null
       }], { onConflict: 'room_id' });
 
       if (stateError) throw stateError;
@@ -234,6 +238,19 @@ export default function AdminDashboard() {
                 { label: 'B2 - Upper Int', value: 'B2' },
               ]}
             />
+
+            <div>
+              <label className="block text-[9px] font-jetbrains text-whapigen-cyan/50 mb-3 uppercase tracking-[0.4em] pl-2 font-black">
+                MISSION THEME (OPTIONAL)
+              </label>
+              <input
+                type="text"
+                value={customTheme}
+                onChange={(e) => setCustomTheme(e.target.value)}
+                placeholder="e.g. Technology, Sports, Vacations..."
+                className="w-full bg-black/40 border border-white/5 rounded-2xl p-5 text-white font-jetbrains text-[13px] tracking-wider focus:border-whapigen-cyan/50 focus:shadow-[0_0_20px_rgba(0,240,255,0.1)] outline-none transition-all placeholder:text-white/20"
+              />
+            </div>
 
 
             <div>
