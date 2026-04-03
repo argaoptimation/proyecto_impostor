@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { Terminal, Lock, Mail, Loader2, AlertCircle, Eye, EyeOff, ShieldCheck } from 'lucide-react';
+import { ArrowRight, Lock, Mail, Loader2, AlertCircle, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { CyberRain } from '../components/ui/CyberRain';
 import { RainToggle } from '../components/ui/RainToggle';
@@ -130,7 +130,7 @@ export default function Login() {
             ) : (
               <>
                 AUTHENTICATE
-                <Terminal className="w-5 h-5 group-hover/btn:translate-x-1 transition-transform" />
+                <ArrowRight className="w-5 h-5 group-hover/btn:translate-x-1 transition-transform" />
               </>
             )}
           </button>
@@ -140,7 +140,7 @@ export default function Login() {
       {/* Footer Meta */}
       <footer className="mt-12 text-center relative z-10 opacity-30">
         <p className="text-[9px] font-jetbrains text-whapigen-cyan tracking-[0.5em] uppercase font-black">
-          SECURE CONNECTION ESTABLISHED // PORT 8080
+          SECURE CONNECTION ESTABLISHED
         </p>
       </footer>
     </div>

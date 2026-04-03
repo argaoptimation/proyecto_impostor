@@ -251,8 +251,10 @@ export default function PlayRoom() {
   useEffect(() => {
     if (!gameState || !room) return;
 
-    if (gameState.phase === 'LOBBY' || gameState.phase === 'RESULTS') {
-      isAbortingRef.current = false; // reset so next active game can abort if needed
+    // AGREGAMOS 'ROLE_REVEAL' AL CANDADO:
+    // No queremos que el sistema de aborto automático actúe mientras se revelan roles
+    if (gameState.phase === 'LOBBY' || gameState.phase === 'RESULTS' || gameState.phase === 'ROLE_REVEAL') {
+      isAbortingRef.current = false;
       return;
     }
 
@@ -433,7 +435,7 @@ export default function PlayRoom() {
         </div>
       )}
 
-      <header className="fixed top-16 md:top-6 left-1/2 -translate-x-1/2 w-[95%] md:w-[70%] z-[60] flex flex-col md:flex-row justify-between items-center p-2 md:p-4 bg-black/40 backdrop-blur-3xl rounded-3xl md:rounded-full border border-white/10 shadow-[0_20px_60px_rgba(0,0,0,0.5)] animate-in slide-in-from-top duration-700 gap-4 md:gap-0">
+      <header className="fixed top-16 md:top-6 left-1/2 -translate-x-1/2 w-[95%] md:w-[60%] z-[60] flex flex-col md:flex-row justify-between items-center p-2 md:p-4 bg-black/40 backdrop-blur-3xl rounded-3xl md:rounded-full border border-white/10 shadow-[0_20px_60px_rgba(0,0,0,0.5)] animate-in slide-in-from-top duration-700 gap-4 md:gap-0">
         <div className="flex items-center gap-6">
           <div className="hidden md:flex items-center gap-3">
             <span className="text-header-premium text-lg font-black tracking-[0.2em] whitespace-nowrap">CIL LENGUAS</span>
@@ -444,7 +446,7 @@ export default function PlayRoom() {
               {room.code}
             </h1>
 
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap justify-center md:justify-start">
               <span className="bg-purple-900/40 backdrop-blur-xl border border-purple-500/30 text-gray-300 font-jetbrains text-xs px-3 py-1 rounded-full uppercase tracking-widest shadow-[0_0_15px_rgba(147,51,234,0.3)]">
                 LEVEL {room.level}
               </span>
@@ -493,53 +495,62 @@ export default function PlayRoom() {
       )}
 
       {isTeacher && (
-        <div className="relative md:fixed md:top-[150px] md:left-8 md:right-8 z-[40] p-4 flex flex-col md:flex-row justify-between items-center mx-auto max-w-7xl px-4 md:px-10 mt-4 md:mt-0">
-          <div className="flex items-center gap-3 font-jetbrains text-purple-300 font-black tracking-[0.4em] text-xs uppercase">
-            <div className="w-2 h-2 rounded-full bg-purple-500 animate-pulse shadow-[0_0_10px_#9333ea]"></div>COORDINATOR OVERRIDE
-          </div>
-          {gameState.phase !== 'LOBBY' && (
-            <div className="flex items-center gap-10 font-jetbrains text-[14px] tracking-[0.3em] font-black uppercase mt-4 md:mt-0">
-              <div className="flex items-center gap-3">
-                <span className="text-white">WORD:</span>
-                <span className="text-white bg-white/5 px-4 py-1 rounded-full border border-white/5 text-[clamp(0.75rem,0.5vw+0.5rem,1rem)]">{gameState.secret_word || '???'}</span>
-              </div>
-              <div className="flex items-start gap-3">
-                {/* Ajusté el label para que siempre diga IMPOSTORS si hay juego en curso */}
-                <span className="text-white mt-1 text-xs font-bold tracking-wider opacity-60">IMPOSTORS:</span>
+        /* Mantenemos tu posicionamiento intacto */
+        <div className="relative md:fixed md:top-[110px] left-0 right-0 md:left-8 md:right-8 z-[40] p-4 flex flex-col items-center justify-center mx-auto max-w-7xl px-4 md:px-10 mt-36 md:mt-0">
 
-                <div className="flex flex-col gap-2">
-                  {activePlayers
-                    .filter(p => p.role === 'IMPOSTOR')
-                    // !!! FIX DEL BAILE: Ordenamos alfabéticamente por nickname para fijar la posición !!!
-                    .sort((a, b) => a.nickname.localeCompare(b.nickname))
-                    // El .map renderiza dinámicamente cuántos impostores haya (1, 2, 3 o 10)
-                    .map((impostor) => (
-                      <span
-                        key={impostor.id} // Clave única para React
-                        className="text-whapigen-red bg-whapigen-red/5 px-4 py-1.5 rounded-full border border-whapigen-red/20 drop-shadow-neon-red text-[clamp(0.75rem,0.5vw+0.5rem,1rem)] text-center animate-in fade-in zoom-in-95 font-black uppercase tracking-wider"
-                      >
-                        {impostor.nickname}
-                      </span>
-                    ))}
+          {/* Contenedor interno con ancho completo y centrado */}
+          <div className="w-full flex flex-col md:flex-row items-center justify-center gap-4 md:gap-12 bg-black/20 md:bg-transparent backdrop-blur-sm md:backdrop-blur-none p-4 rounded-3xl">
 
-                  {/* Fallback por si la partida no empezó o no hay impostores */}
-                  {activePlayers.filter(p => p.role === 'IMPOSTOR').length === 0 && (
-                    <span className="text-white/20 italic text-xs px-2 py-1">AWAITING INTEL...</span>
-                  )}
-                </div>
-              </div>
-              <button
-                onClick={handleEndSession}
-                className="bg-whapigen-red hover:bg-white hover:text-black text-white px-6 py-2 rounded-full transition-all font-black"
-              >
-                ABORT MISSION
-              </button>
+            {/* Etiqueta del Coordinador */}
+            <div className="flex items-center gap-3 font-jetbrains text-purple-300 font-black tracking-[0.4em] text-[10px] md:text-xs uppercase whitespace-nowrap">
+              <div className="w-2 h-2 rounded-full bg-purple-500 animate-pulse shadow-[0_0_10px_#9333ea]"></div>
+              COORDINATOR OVERRIDE
             </div>
-          )}
+
+            {gameState.phase !== 'LOBBY' && (
+              /* Grupo de Datos: Centrado en mobile, espaciado en desktop */
+              <div className="flex flex-col sm:flex-row items-center gap-6 md:gap-10 font-jetbrains text-[12px] md:text-[14px] tracking-[0.3em] font-black uppercase w-full md:w-auto justify-center">
+
+                {/* WORD */}
+                <div className="flex items-center gap-3">
+                  <span className="text-white/40 text-[10px]">WORD:</span>
+                  <span className="text-white bg-white/5 px-4 py-1 rounded-full border border-white/5 whitespace-nowrap">
+                    {gameState.secret_word || '???'}
+                  </span>
+                </div>
+
+                {/* IMPOSTORS */}
+                <div className="flex items-center gap-3">
+                  <span className="text-white/40 text-[10px]">IMPOSTORS:</span>
+                  <div className="flex flex-wrap justify-center gap-2">
+                    {activePlayers
+                      .filter(p => p.role === 'IMPOSTOR')
+                      .sort((a, b) => a.nickname.localeCompare(b.nickname))
+                      .map((impostor) => (
+                        <span
+                          key={impostor.id}
+                          className="text-whapigen-red bg-whapigen-red/5 px-4 py-1.5 rounded-full border border-whapigen-red/20 drop-shadow-neon-red text-[11px] font-black uppercase tracking-wider"
+                        >
+                          {impostor.nickname}
+                        </span>
+                      ))}
+                  </div>
+                </div>
+
+                {/* Botón de Aborto */}
+                <button
+                  onClick={handleEndSession}
+                  className="bg-whapigen-red/20 hover:bg-whapigen-red text-whapigen-red hover:text-white px-6 py-2 rounded-full transition-all font-black text-[10px] border border-whapigen-red/30"
+                >
+                  ABORT
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
-      <main className="flex-grow pt-8 md:pt-[180px] md:-mt-20 pb-32 px-4 md:px-8 flex flex-col items-center justify-center relative z-10 w-full">
+      <main className={`flex-grow pb-32 px-4 md:px-8 flex flex-col items-center justify-start md:justify-center relative z-10 w-full transition-all ${isTeacher ? 'pt-46' : 'pt-28'} ${isTeacher ? 'md:pt-[80px]' : 'md:pt-[0px]'}`}>
         {(() => {
           switch (gameState.phase) {
             case 'LOBBY': return <PhaseLobby isTeacher={isTeacher} roomId={roomId!} players={activePlayers} roomLevel={room.level} />;
@@ -997,7 +1008,7 @@ function PhaseReveal({ isTeacher, roomId, players }: { isTeacher: boolean, roomI
   }
 
   return (
-    <div className="w-full max-w-lg text-center space-y-8 pt-8 md:pt-0 animate-in zoom-in-95 relative z-50">
+    <div className="w-full max-w-lg text-center space-y-8 pt-8 md:pt-40 animate-in zoom-in-95 relative z-50">
       <h2 className="text-3xl font-sora font-extrabold text-white uppercase tracking-wider shadow-md">TOP SECRET DATA</h2>
 
       <div
@@ -1006,12 +1017,12 @@ function PhaseReveal({ isTeacher, roomId, players }: { isTeacher: boolean, roomI
       >
         <div className="absolute inset-0 bg-digital-grid bg-[length:60px_60px] opacity-[0.03] pointer-events-none"></div>
         {!revealed ? (
-          <div className="flex flex-col items-center gap-6 animate-in zoom-in-50">
+          <div className="flex flex-col items-center gap-6 md:gap-12 animate-in zoom-in-50">
             <Lock className="w-16 h-16 text-whapigen-cyan animate-pulse" />
             <p className="font-jetbrains text-sm tracking-[0.5em] text-white/70 uppercase">Tap to decrypt</p>
           </div>
         ) : (
-          <div className="flex flex-col items-center gap-8 animate-in slide-in-from-bottom duration-500 w-full px-4 md:px-12">
+          <div className="flex flex-col items-center gap-2 animate-in slide-in-from-bottom duration-500 w-full px-4 md:px-12">
             <div className="flex items-center gap-4 text-green-400 font-jetbrains text-sm tracking-[0.3em] uppercase">
               <Shield className="w-8 h-8" />
               <span>Sector Secured</span>
@@ -1720,7 +1731,7 @@ function PhaseResults({ isTeacher, roomId, players }: { isTeacher: boolean, room
       <div className="space-y-6 flex flex-col items-center">
         <p className="font-jetbrains text-xs tracking-[0.4em] text-white/70 mb-2">ROUNDS PLAYED: {currentRound}</p>
         <h3 className="text-whapigen-cyan font-jetbrains tracking-[0.3em] text-sm uppercase">MISSION CONCLUDED</h3>
-        <h2 className={`text-6xl font-sora font-black uppercase tracking-tighter drop-shadow-md ${impostorWon ? 'text-whapigen-red drop-shadow-neon-red' : 'text-whapigen-green drop-shadow-neon-green'}`}>
+        <h2 className={`text-4xl font-sora font-black uppercase tracking-tighter drop-shadow-md ${impostorWon ? 'text-whapigen-red drop-shadow-neon-red' : 'text-whapigen-green drop-shadow-neon-green'}`}>
           {titleText}
         </h2>
         <p className="text-white/70 font-jetbrains text-lg tracking-[0.4em] uppercase pt-4 opacity-70">
@@ -1730,22 +1741,27 @@ function PhaseResults({ isTeacher, roomId, players }: { isTeacher: boolean, room
 
       {/* Scoreboard */}
       <div className="bg-black/60 backdrop-blur-xl border border-white/10 rounded-[40px] p-8 md:p-16 mt-8 md:mt-12 shadow-[0_40px_100px_rgba(0,0,0,0.5)] w-full max-w-2xl transform hover:scale-[1.02] transition-transform duration-700 shadow-neon-pulse-cyan">
-        <h3 className="text-white font-black font-jetbrains tracking-[0.8em] text-lg mb-3 md:mb-3 border-b border-white/5 pb-6 uppercase ml-[0.8em] text-center">Scoreboard</h3>
+        <h3 className="text-white font-black font-jetbrains tracking-[0.4em] md:tracking-[0.8em] text-sm md:text-lg mb-3 md:mb-3 border-b border-white/5 pb-6 uppercase text-center w-full">
+          Scoreboard
+        </h3>
         <div className="flex flex-col gap-2">
-          {[...players].filter((p: any) => !p.is_host).sort((a: any, b: any) => (b.score || 0) - (a.score || 0)).map((p: any) => (
-            <div key={p.id} className="flex justify-between items-center bg-white/[0.03] p-6 rounded-[30px] border border-white/5 transition-all hover:bg-white/[0.06] hover:border-whapigen-cyan/20 group/row group relative overflow-x-hidden">
-              <div className="absolute inset-0 bg-gradient-to-r from-whapigen-cyan/5 to-transparent opacity-0 group-hover/row:opacity-100 transition-opacity"></div>
-              <div className="flex items-center gap-2 md:gap-6 relative z-10">
-                <div className={`w-3 h-3 rounded-full ${p.is_eliminated ? 'bg-gray-800' : 'bg-whapigen-cyan shadow-neon-cyan'}`}></div>
-                <span className={`font-sora tracking-tighter text-xl uppercase ${p.is_eliminated ? 'text-white/20 line-through' : 'text-white font-black'}`}>{p.nickname}</span>
+          {[...players]
+            .filter((p: any) => !p.is_host)
+            .sort((a: any, b: any) => (b.score - a.score) || a.nickname.localeCompare(b.nickname))
+            .map((p: any) => (
+              <div key={p.id} className="flex justify-between items-center bg-white/[0.03] p-6 rounded-[30px] border border-white/5 transition-all hover:bg-white/[0.06] hover:border-whapigen-cyan/20 group/row group relative overflow-x-hidden">
+                <div className="absolute inset-0 bg-gradient-to-r from-whapigen-cyan/5 to-transparent opacity-0 group-hover/row:opacity-100 transition-opacity"></div>
+                <div className="flex items-center gap-2 md:gap-6 relative z-10">
+                  <div className={`w-3 h-3 rounded-full ${p.is_eliminated ? 'bg-gray-800' : 'bg-whapigen-cyan shadow-neon-cyan'}`}></div>
+                  <span className={`font-sora tracking-tighter text-xl uppercase ${p.is_eliminated ? 'text-white/20 line-through' : 'text-white font-black'}`}>{p.nickname}</span>
+                </div>
+                <div className="relative z-10">
+                  <span className="font-jetbrains font-black text-white text-[12px] md:text-[18px] tracking-widest px-5 py-2 bg-white/5 rounded-full border border-white/5 group-hover/row:bg-whapigen-cyan group-hover/row:text-black transition-all group-hover/row:scale-110">
+                    {p.score || 0} PTS
+                  </span>
+                </div>
               </div>
-              <div className="relative z-10">
-                <span className="font-jetbrains font-black text-white text-[12px] md:text-[18px] tracking-widest px-5 py-2 bg-white/5 rounded-full border border-white/5 group-hover/row:bg-whapigen-cyan group-hover/row:text-black transition-all group-hover/row:scale-110">
-                  {p.score || 0} PTS
-                </span>
-              </div>
-            </div>
-          ))}
+            ))}
         </div>
       </div>
 

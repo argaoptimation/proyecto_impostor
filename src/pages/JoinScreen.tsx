@@ -117,7 +117,7 @@ export default function JoinScreen() {
       <div className="mb-10 text-center relative z-10 w-full max-w-md pt-12 flex flex-col items-center">
 
         {/* New Reusable Glitch Logo */}
-        <GlitchLogo size="lg" className="mb-1" />
+        <GlitchLogo size="md" className="mb-1" />
 
         <h1 className="text-4xl md:text-6xl font-sora font-black tracking-tighter text-white drop-shadow-md uppercase mt-6 group transition-all duration-300 px-12 overflow-visible w-full inline-block">
           THE <span className="text-vivid-gradient italic inline-block pr-4">IMPOSTOR</span>
