@@ -713,27 +713,31 @@ function PhaseLobby({ isTeacher, roomId, players, roomLevel }: { isTeacher: bool
     }
     localStorage.setItem(historyKey, JSON.stringify(newHistory));
 
-    // 1. Buscamos el tema directamente en la base de datos para tenerlo fresco
-    // Buscamos theme Y use_book_bank directamente en la base de datos
+    // 1. Buscamos theme Y use_book_bank directamente en la base de datos
     const { data: dbState } = await supabase
       .from('game_state')
       .select('theme, use_book_bank')
       .eq('room_id', roomId)
       .single();
 
-    // Llamamos a la IA pasando el nuevo valor
-    const aiResult = await generateGameWord(
-      roomLevel,
-      dbState?.theme || null,
-      dbState?.use_book_bank || false // <--- PASAMOS EL VALOR DEL TOGGLE
-    );
-
     let finalWord = '???';
     let finalHint = '';
 
-    // 2. Generamos la palabra con Gemini usando "roomLevel" (que ya está declarado)
+    // 2. Generamos la palabra con Gemini usando los 3 argumentos
     try {
-      const aiResult = await generateGameWord(roomLevel, dbState?.theme || null);
+      const aiResult = await generateGameWord(
+        roomLevel,
+        dbState?.theme || null,
+        dbState?.use_book_bank || false // <-- ACÁ ESTÁ EL TERCER ARGUMENTO
+      );
+
+      // --- NUEVO: CORTE SI NO HAY MATCH EN EL LIBRO ---
+      if (aiResult && aiResult.word === "ERROR_NO_MATCH") {
+        setStartError("MISSION ABORTED: NO WORDS FOUND FOR THIS THEME IN THE BOOK.");
+        return;
+      }
+      // ------------------------------------------------
+
       if (aiResult && aiResult.word) {
         finalWord = aiResult.word;
         finalHint = aiResult.hint || '';
@@ -741,7 +745,7 @@ function PhaseLobby({ isTeacher, roomId, players, roomLevel }: { isTeacher: bool
         throw new Error("Gemini no devolvió una palabra válida");
       }
     } catch (error) {
-      // 3. FALLBACK: Si Gemini falla por red o API Key, el juego sigue con el banco local
+      // 3. FALLBACK: Si Gemini falla
       console.warn("⚠️ Fallo en Gemini, usando banco local...");
       finalWord = getRandomWordEntry(roomLevel).word;
       finalHint = '???'; // Pista genérica de emergencia
