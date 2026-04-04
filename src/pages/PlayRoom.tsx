@@ -448,7 +448,6 @@ export default function PlayRoom() {
           </div>
         </div>
       )}
-
       <header className="fixed top-16 md:top-6 left-1/2 -translate-x-1/2 w-[95%] md:w-[60%] z-[60] flex flex-col md:flex-row justify-between items-center p-2 md:p-4 bg-black/40 backdrop-blur-3xl rounded-3xl md:rounded-full border border-white/10 shadow-[0_20px_60px_rgba(0,0,0,0.5)] animate-in slide-in-from-top duration-700 gap-4 md:gap-0">
         <div className="flex items-center gap-6">
           <div className="hidden md:flex items-center gap-3">
@@ -461,9 +460,19 @@ export default function PlayRoom() {
             </h1>
 
             <div className="flex items-center gap-2 flex-wrap justify-center md:justify-start">
+              {/* BADGE DE NIVEL */}
               <span className="bg-purple-900/40 backdrop-blur-xl border border-purple-500/30 text-gray-300 font-jetbrains text-xs px-3 py-1 rounded-full uppercase tracking-widest shadow-[0_0_15px_rgba(147,51,234,0.3)]">
                 LEVEL {room.level}
               </span>
+
+              {/* BADGE DE TEMÁTICA (NUEVO) */}
+              {gameState?.theme && (
+                <span className="bg-whapigen-cyan/20 backdrop-blur-xl border border-whapigen-cyan/40 text-whapigen-cyan font-jetbrains text-[10px] px-3 py-1 rounded-full uppercase tracking-[0.2em] shadow-[0_0_15px_rgba(0,240,255,0.1)] font-black">
+                  THEME: {gameState.theme}
+                </span>
+              )}
+
+              {/* BADGE DE TURNOS */}
               <span className="bg-cyan-900/40 backdrop-blur-xl border border-cyan-500/30 text-gray-300 font-jetbrains text-xs px-3 py-1 rounded-full uppercase tracking-widest shadow-[0_0_15px_rgba(0,240,255,0.2)]">
                 {room.turn_duration}S TURNS
               </span>
@@ -1291,7 +1300,7 @@ function PhaseSpeaking({ isTeacher, room, gameState, players }: { isTeacher: boo
       )}
 
       {isTeacher && (
-        <div className="flex flex-col items-center gap-4 mt-8 w-full">
+        <div className="flex flex-col items-center gap-4 md:gap-10 mt-8 w-full">
           <div className="flex gap-8">
             <button
               onClick={togglePause}

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { LogOut, Plus, Users, Play, Clock, Hash, Loader2, Trash2, ArrowRight, ShieldCheck, ChevronDown } from 'lucide-react';
+import { LogOut, Plus, Users, Play, Clock, Hash, Loader2, Trash2, ArrowRight, Target, ShieldCheck, ChevronDown } from 'lucide-react';
 import { GlitchLogo } from '../components/ui/GlitchLogo';
 import { CyberRain } from '../components/ui/CyberRain';
 import { RainToggle } from '../components/ui/RainToggle';
@@ -108,7 +108,8 @@ export default function AdminDashboard() {
           turn_duration: turnDuration,
           voting_duration: votingDuration,
           level: level,
-          hints_enabled: hintsEnabled
+          hints_enabled: hintsEnabled,
+          theme: customTheme.trim() || null
         }])
         .select()
         .single();
@@ -120,7 +121,9 @@ export default function AdminDashboard() {
         phase: 'LOBBY',
         current_turn_index: 0,
         is_paused: false,
-        theme: customTheme.trim() || null
+        theme: customTheme.trim() || null,
+        secret_word: null, // <-- WIPE TOTAL DE LA PALABRA
+        secret_hint: null  // <-- WIPE TOTAL DE LA PISTA
       }], { onConflict: 'room_id' });
 
       if (stateError) throw stateError;
@@ -236,6 +239,8 @@ export default function AdminDashboard() {
                 { label: 'A2 - Elementary', value: 'A2' },
                 { label: 'B1 - Intermediate', value: 'B1' },
                 { label: 'B2 - Upper Int', value: 'B2' },
+                { label: 'C1 - Advanced', value: 'C1' },
+                { label: 'C2 - Proficiency', value: 'C2' },
               ]}
             />
 
@@ -313,17 +318,24 @@ export default function AdminDashboard() {
                   <div className="relative z-10">
                     <div className="flex items-center justify-center md:justify-start gap-10 md:gap-6 w-full">
                       <span className="text-4xl font-black text-white font-sora tracking-tighter group-hover/item:text-whapigen-cyan transition-colors">{room.code}</span>
-                      <span className={`text-[8px] px-4 py-1.5 rounded-full border font-black tracking-[0.3em] uppercase transition-all ${room.status === 'LOBBY' ? 'text-whapigen-cyan border-whapigen-cyan/20 bg-whapigen-cyan/5' : 'text-purple-400 border-purple-500/20 bg-purple-500/5'}`}>
-                        {room.status}
-                      </span>
                     </div>
-                    <div className="flex justify-center md:justify-start gap-8 mt-4 w-full">
-                      <p className="text-[10px] text-gray-500 font-jetbrains flex items-center gap-2 uppercase tracking-[0.2em] font-bold">
-                        <Clock className="w-3.5 h-3.5 text-whapigen-cyan/40" /> {room.turn_duration}s
-                      </p>
-                      <p className="text-[10px] text-gray-500 font-jetbrains flex items-center gap-2 uppercase tracking-[0.2em] font-bold">
-                        <Hash className="w-3.5 h-3.5 text-purple-500/40" /> {room.level}
-                      </p>
+
+                    <div className="flex flex-col gap-2 mt-4">
+                      <div className="flex justify-center md:justify-start gap-6 w-full">
+                        <p className="text-[14px] text-gray-500 font-jetbrains flex items-center gap-2 uppercase tracking-[0.2em] font-bold">
+                          <Clock className="w-3.5 h-3.5 text-whapigen-cyan/40" /> {room.turn_duration}s
+                        </p>
+                        <p className="text-[14px] text-gray-500 font-jetbrains flex items-center gap-2 uppercase tracking-[0.2em] font-bold">
+                          <Hash className="w-3.5 h-3.5 text-purple-500/40" /> {room.level}
+                        </p>
+                      </div>
+
+                      {/* MOSTRAR TEMÁTICA SI EXISTE */}
+                      {room.theme && (
+                        <p className="text-[12px] text-whapigen-cyan/60 font-jetbrains flex items-center gap-2 uppercase tracking-[0.3em] font-black">
+                          <Target className="w-3 h-3" /> THEME: {room.theme}
+                        </p>
+                      )}
                     </div>
                   </div>
                   <div className="relative z-10 flex items-center gap-4 w-full md:w-auto justify-center md:justify-end">

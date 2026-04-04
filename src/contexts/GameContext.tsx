@@ -25,6 +25,7 @@ interface GameState {
   current_turn_index: number;
   secret_word: string | null;
   secret_hint: string | null;
+  theme?: string | null;
   turn_started_at: string | null;
   is_paused: boolean;
   current_round: number;
