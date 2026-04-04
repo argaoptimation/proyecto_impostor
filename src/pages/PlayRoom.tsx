@@ -714,7 +714,19 @@ function PhaseLobby({ isTeacher, roomId, players, roomLevel }: { isTeacher: bool
     localStorage.setItem(historyKey, JSON.stringify(newHistory));
 
     // 1. Buscamos el tema directamente en la base de datos para tenerlo fresco
-    const { data: dbState } = await supabase.from('game_state').select('theme').eq('room_id', roomId).single();
+    // Buscamos theme Y use_book_bank directamente en la base de datos
+    const { data: dbState } = await supabase
+      .from('game_state')
+      .select('theme, use_book_bank')
+      .eq('room_id', roomId)
+      .single();
+
+    // Llamamos a la IA pasando el nuevo valor
+    const aiResult = await generateGameWord(
+      roomLevel,
+      dbState?.theme || null,
+      dbState?.use_book_bank || false // <--- PASAMOS EL VALOR DEL TOGGLE
+    );
 
     let finalWord = '???';
     let finalHint = '';

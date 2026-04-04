@@ -55,6 +55,7 @@ export default function AdminDashboard() {
   const [level, setLevel] = useState('A1');
   const [hintsEnabled, setHintsEnabled] = useState(false);
   const [customTheme, setCustomTheme] = useState('');
+  const [useBookBank, setUseBookBank] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -99,6 +100,7 @@ export default function AdminDashboard() {
     try {
       const code = Math.floor(1000 + Math.random() * 9000).toString();
 
+      // 1. Insertamos en la tabla 'rooms' (para que aparezca en tu lista del Dashboard)
       const { data: roomData, error: roomError } = await supabase
         .from('rooms')
         .insert([{
@@ -109,38 +111,38 @@ export default function AdminDashboard() {
           voting_duration: votingDuration,
           level: level,
           hints_enabled: hintsEnabled,
-          theme: customTheme.trim() || null
+          theme: customTheme.trim() || null,
+          use_book_bank: useBookBank // <--- AGREGADO AQUÍ
         }])
         .select()
         .single();
 
       if (roomError) throw roomError;
 
+      // 2. Insertamos en 'game_state' (para que PlayRoom.tsx sepa qué modo usar)
       const { error: stateError } = await supabase.from('game_state').upsert([{
         room_id: roomData.id,
         phase: 'LOBBY',
         current_turn_index: 0,
         is_paused: false,
         theme: customTheme.trim() || null,
-        secret_word: null, // <-- WIPE TOTAL DE LA PALABRA
-        secret_hint: null  // <-- WIPE TOTAL DE LA PISTA
+        use_book_bank: useBookBank, // <--- AGREGADO AQUÍ
+        secret_word: null,
+        secret_hint: null
       }], { onConflict: 'room_id' });
 
       if (stateError) throw stateError;
 
-      // Insert Admin as host in players
+      // 3. Insertamos al Coordinador
       await supabase.from('players').insert([{
         room_id: roomData.id,
         nickname: 'COORDINATOR',
         is_host: true
       }]);
 
-
-      // Successfully created both records
       navigate(`/game/${roomData.id}`);
     } catch (error: any) {
       console.error("Room creation error:", error);
-      // Suppress the visible alert on schema cache delays since the navigation handles successful flow
     } finally {
       setIsCreating(false);
     }
@@ -243,6 +245,33 @@ export default function AdminDashboard() {
                 { label: 'C2 - Proficiency', value: 'C2' },
               ]}
             />
+
+            {/* AI MODE TOGGLE */}
+            <div className="space-y-4 mt-6">
+              <label className="block text-[9px] font-jetbrains text-whapigen-cyan/50 uppercase tracking-[0.4em] pl-2 font-black">
+                Intelligence Source
+              </label>
+              <div
+                onClick={() => setUseBookBank(!useBookBank)}
+                className={`group relative flex items-center justify-between p-6 rounded-[30px] border transition-all cursor-pointer backdrop-blur-xl ${useBookBank
+                  ? 'bg-whapigen-cyan/10 border-whapigen-cyan/40 shadow-neon-cyan/10'
+                  : 'bg-black/40 border-white/5 hover:border-white/10'
+                  }`}
+              >
+                <div className="flex flex-col items-start gap-1">
+                  <span className="font-sora text-[14px] text-white font-black tracking-widest uppercase">
+                    {useBookBank ? 'AI BOOK' : 'GENERAL AI'}
+                  </span>
+                  <span className="font-jetbrains text-[12px] text-white/40 uppercase tracking-tighter">
+                    {useBookBank ? 'Synced with CIL Lenguas Books' : 'General Gemini Knowledge'}
+                  </span>
+                </div>
+                <div className={`w-12 h-6 rounded-full relative transition-all duration-300 ${useBookBank ? 'bg-whapigen-cyan' : 'bg-white/10'}`}>
+                  <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow-xl transition-all duration-300 ${useBookBank ? 'left-7' : 'left-1'}`}></div>
+                </div>
+              </div>
+            </div>
+
 
             <div>
               <label className="block text-[9px] font-jetbrains text-whapigen-cyan/50 mb-3 uppercase tracking-[0.4em] pl-2 font-black">

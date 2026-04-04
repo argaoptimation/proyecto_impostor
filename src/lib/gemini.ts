@@ -1,54 +1,72 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { getRandomWordEntry, getHintsForWord } from '../data/words';
+import { getRandomWordEntry } from '../data/words';
+import { bookVocabulary } from '../data/bookWords';
 
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 
-export async function generateGameWord(level: string, theme: string | null): Promise<{ word: string, hint: string }> {
+export async function generateGameWord(
+  level: string,
+  theme: string | null,
+  useBookBank: boolean
+): Promise<{ word: string, hint: string }> {
+
   if (!apiKey) {
-    console.warn('⚠️ Gemini API Key not found. Using local fallback.');
     const fallback = getRandomWordEntry(level);
-    const hints = getHintsForWord(fallback.word, level);
-    return { word: fallback.word, hint: hints ? hints[0] : 'Unknown' };
+    return { word: fallback.word, hint: 'Fallback' };
   }
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
-    // Definimos el prompt limpio y profesional en un solo bloque
-    const prompt = `You are a specialized game engine for 'The Impostor', an educational English learning game. 
-    Your goal is to generate a SECRET WORD and a corresponding HINT for students.
+    // 1. LÓGICA DE FILTRADO (DELEGADA A LA IA)
+    let contextInstructions = "";
 
-    CONTEXT:
-    - Target English Level: CEFR ${level}.
-    - Theme Constraint: ${theme ? `The word MUST be strictly related to the theme: "${theme}"` : "Random general topic"}.
+    if (useBookBank) {
+      // Obtenemos TODAS las palabras del nivel (es una simple lista de strings ahora)
+      const levelWords = bookVocabulary[level] || [];
 
-    STRICT RULES:
-    1. WORD COMPLEXITY: For B1/B2/C1/C2 levels, avoid basic nouns (like 'apple', 'house'). Use academic, professional or field-specific vocabulary. For A1/A2, keep it simple but engaging.
-    2. WORD INTEGRITY: The secret word MUST be a real, grammatically correct English word. No typos allowed.
-    3. SEMANTIC ADHERENCE: If a theme is provided, do NOT generate words from unrelated fields.
-    4. HINT LOGIC: The hint MUST be exactly ONE word. It should be a conceptual association, NOT a direct definition, and NOT the word itself. It must help the Impostor blend in without giving the word away immediately.
-    5. OUTPUT FORMAT: Return ONLY a raw JSON object. No markdown, no explanations.
+      if (levelWords.length > 0) {
+        const wordList = levelWords.join(', ');
+        contextInstructions = `
+MODO ESTRICTO: AI BOOK (Sincronización semántica con el plan de estudios).
+Aquí tienes la lista completa de palabras autorizadas para el nivel ${level}: [${wordList}].
+Tu tarea es analizar esta lista y ELEGIR LA PALABRA que mejor se adapte al tema solicitado ("${theme}").
+Si ninguna palabra encaja perfectamente, elige la que más se acerque conceptualmente.
+OBLIGATORIO: BAJO NINGUNA CIRCUNSTANCIA inventes una palabra. Solo puedes devolver una palabra exacta de la lista proporcionada.`;
+      } else {
+        contextInstructions = `
+MODO: GENERAL AI (Búsqueda de respaldo).
+El banco de palabras local está vacío para este nivel. Genera una palabra de nivel académico apropiado para CEFR ${level} relacionada con el tema "${theme}".`;
+      }
+    }
 
-    FORMAT:
-    {
-      "word": "SECRET_WORD",
-      "hint": "ASSOCIATED_HINT"
-    }`;
+    // 2. CONSTRUCCIÓN DEL PROMPT EN ESPAÑOL
+    const prompt = `Eres la inteligencia artificial de un juego educativo llamado 'The Impostor'.
+Tu objetivo es elegir una PALABRA SECRETA y generar una PISTA (hint) para esa palabra.
+Los resultados (palabra y pista) DEBEN estar en INGLÉS.
+
+CONTEXTO:
+- Nivel de Inglés de los alumnos: CEFR ${level}.
+- Tema solicitado: ${theme || "Tema general libre"}.
+${contextInstructions}
+
+REGLAS ESTRICTAS PARA LA PISTA (HINT):
+1. La pista DEBE ser EXACTAMENTE UNA PALABRA en inglés (un sustantivo o un adjetivo).
+2. CRÍTICO: PROHIBIDO usar onomatopeyas (ej: no uses 'meow', 'woof', 'moo', 'beep', 'roar').
+3. CRÍTICO: La pista debe ser una asociación conceptual, NO un sinónimo directo, NO la palabra misma, y NO el sonido que hace un animal o un objeto.
+4. La palabra secreta elegida DEBE existir en el idioma inglés y estar escrita correctamente.
+
+FORMATO DE SALIDA:
+Devuelve ÚNICAMENTE un objeto JSON válido con esta estructura exacta, sin texto adicional ni formato markdown:
+{ "word": "LA_PALABRA_SECRETA_AQUI", "hint": "LA_PISTA_AQUI" }`;
 
     const result = await model.generateContent(prompt);
     const responseText = result.response.text();
-
-    // Extract JSON from response in case markdown blocks are present
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error("Invalid format from Gemini");
-    }
 
+    if (!jsonMatch) throw new Error("Formato JSON inválido");
     const data = JSON.parse(jsonMatch[0]);
-    if (!data.word || !data.hint) {
-      throw new Error("Missing word or hint in Gemini response");
-    }
 
     return {
       word: data.word.toUpperCase(),
@@ -56,10 +74,8 @@ export async function generateGameWord(level: string, theme: string | null): Pro
     };
 
   } catch (error) {
-    console.error('❌ Gemini word generation failed:', error);
-    // Fallback logic
+    console.error('❌ Gemini Error:', error);
     const fallback = getRandomWordEntry(level);
-    const hints = getHintsForWord(fallback.word, level);
-    return { word: fallback.word, hint: hints ? hints[0] : 'Unknown' };
+    return { word: fallback.word, hint: '???' };
   }
 }
