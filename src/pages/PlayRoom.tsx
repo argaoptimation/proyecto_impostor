@@ -713,22 +713,32 @@ function PhaseLobby({ isTeacher, roomId, players, roomLevel }: { isTeacher: bool
     }
     localStorage.setItem(historyKey, JSON.stringify(newHistory));
 
-    // 1. Buscamos theme Y use_book_bank directamente en la base de datos
+    // 1. Buscamos used_words en la tabla ROOMS (que es donde debe vivir para no borrarse)
+    const { data: roomData } = await supabase
+      .from('rooms')
+      .select('used_words')
+      .eq('id', roomId)
+      .single();
+
+    // 2. Buscamos theme y use_book_bank en la tabla game_state
     const { data: dbState } = await supabase
       .from('game_state')
       .select('theme, use_book_bank')
       .eq('room_id', roomId)
       .single();
 
+    const previousWords = roomData?.used_words || [];
+
     let finalWord = '???';
     let finalHint = '';
 
-    // 2. Generamos la palabra con Gemini usando los 3 argumentos
+    // 3. Generamos la palabra con Gemini usando los 4 argumentos
     try {
       const aiResult = await generateGameWord(
         roomLevel,
         dbState?.theme || null,
-        dbState?.use_book_bank || false // <-- ACÁ ESTÁ EL TERCER ARGUMENTO
+        dbState?.use_book_bank || false,
+        previousWords
       );
 
       // --- NUEVO: CORTE SI NO HAY MATCH EN EL LIBRO ---
@@ -750,6 +760,14 @@ function PhaseLobby({ isTeacher, roomId, players, roomLevel }: { isTeacher: bool
       finalWord = getRandomWordEntry(roomLevel).word;
       finalHint = '???'; // Pista genérica de emergencia
     }
+
+    const updatedUsedWords = [...previousWords, finalWord];
+
+    // 4. HACEMOS EL UPDATE DE LA LISTA DE PALABRAS EN LA TABLA ROOMS
+    await supabase
+      .from('rooms')
+      .update({ used_words: updatedUsedWords })
+      .eq('id', roomId);
 
     // ── DISTRIBUTE ROLES AND INITIAL TURN ORDER ──
     const shuffledForOrder = [...livePlayers].sort(() => Math.random() - 0.5);

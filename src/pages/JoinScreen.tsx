@@ -27,7 +27,7 @@ export default function JoinScreen() {
       const cleanNickname = nickname.trim().toUpperCase();
       const cleanRoomCode = roomCode.trim().toUpperCase();
 
-      // 1. Buscamos la sala usando el nombre real de la columna: 'code'
+      // 1. Buscamos la sala
       const { data: roomData, error: roomError } = await supabase
         .from('rooms')
         .select('id')
@@ -35,7 +35,6 @@ export default function JoinScreen() {
         .single();
 
       if (roomError || !roomData) {
-        console.error("Error de Supabase:", roomError);
         throw new Error('CÓDIGO DE SALA INVÁLIDO');
       }
 
@@ -49,24 +48,17 @@ export default function JoinScreen() {
       if (countError) throw countError;
       if (count !== null && count >= 16) throw new Error('LA SALA ESTÁ LLENA (16/16)');
 
-      // 3. Validar Nickname (Candado anti-clones y LIMPIEZA DE FANTASMAS)
+      // 3. CANDADO ANTI-CLONES (Estricto, sin borrar a nadie)
       const { data: existingPlayer } = await supabase
         .from('players')
-        .select('id, created_at')
+        .select('id')
         .eq('room_id', roomData.id)
         .eq('nickname', cleanNickname)
         .maybeSingle();
 
       if (existingPlayer) {
-        const createdAt = new Date(existingPlayer.created_at).getTime();
-        const ageSeconds = (Date.now() - createdAt) / 1000;
-
-        if (ageSeconds < 30) {
-          // ACÁ PONEMOS EL MENSAJE LLAMATIVO 1
-          throw new Error('⚠️ DUPLICATE IDENTITY: PLAYER ALREADY IN THE ROOM');
-        } else {
-          await supabase.from('players').delete().eq('id', existingPlayer.id);
-        }
+        // Si el nombre ya existe, bloqueamos la entrada directamente.
+        throw new Error('⚠️ DUPLICATE IDENTITY: PLAYER ALREADY IN THE ROOM');
       }
 
       // 4. Insertar Jugador
@@ -77,18 +69,14 @@ export default function JoinScreen() {
       });
 
       if (joinError) {
-        // INTERCEPTAMOS EL ERROR FEO DE LA BASE DE DATOS
+        // Interceptamos el error de duplicado de Postgres por las dudas
         if (joinError.message.includes('duplicate') || joinError.code === '23505') {
-          // ACÁ PONEMOS EL MENSAJE LLAMATIVO 2 (El mismo para mantener coherencia)
           throw new Error('⚠️ DUPLICATE IDENTITY: PLAYER ALREADY IN THE ROOM');
         }
-        // Si es otro tipo de error, lo dejamos pasar
         throw joinError;
       }
 
-      if (joinError) throw joinError;
-
-      // 5. Redirigir (CON EL AWAIT QUE FALTABA PARA EVITAR EL BUG DEL PARPADEO)
+      // 5. Redirigir
       await joinRoom(roomData.id, cleanNickname);
       navigate(`/game/${roomData.id}`);
 
