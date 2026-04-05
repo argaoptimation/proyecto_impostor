@@ -29,6 +29,7 @@ interface GameState {
   current_round: number;
   max_rounds: number;
   created_at: string;
+  last_eliminated_info?: { nickname: string; wasImpostor: boolean } | null;
 }
 
 export interface Room {

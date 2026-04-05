@@ -1533,12 +1533,21 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
 
   // Separated: the actual elimination + round transition logic
   const processRoundEnd = async (eliminatedId: string | null) => {
-    // TAREA 1: SOLO ese jugador sea marcado como is_eliminated
+    // Variable para guardar el nombre y si era impostor
+    let lastEliminatedInfo = null;
+
     if (eliminatedId) {
       await supabase.from('players').update({ is_eliminated: true }).eq('id', eliminatedId);
-      refreshPlayers(); // TAREA 3: UI Sync Inmediata
+      refreshPlayers();
 
       const eliminatedPlayer = alivePlayers.find((p: any) => p.id === eliminatedId);
+      if (eliminatedPlayer) {
+        lastEliminatedInfo = {
+          nickname: eliminatedPlayer.nickname,
+          wasImpostor: eliminatedPlayer.role === 'IMPOSTOR'
+        };
+      }
+
       if (eliminatedPlayer?.role === 'IMPOSTOR') {
         const winners = alivePlayers.filter((p: any) => p.id !== eliminatedId);
         const updates = winners.map((p: any) => supabase.from('players').update({ score: (p.score || 0) + 10 }).eq('id', p.id));
@@ -1552,29 +1561,28 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
       }
     }
 
-    // TAREA 2: Lógica de Victoria (Delegada a global o manejada acá si sobrevive)
+    // TAREA 2: Lógica de Victoria
     const newAlive = eliminatedId ? alivePlayers.filter((p: any) => p.id !== eliminatedId) : alivePlayers;
-
     const impostorsAlive = newAlive.filter((p: any) => p.role === 'IMPOSTOR').length;
     const nativesAlive = newAlive.length - impostorsAlive;
 
+    // Actualizamos el estado del juego con la info del último eliminado
+    const updatePayload: any = {
+      last_eliminated_info: lastEliminatedInfo // <-- AGREGAMOS ESTA NUEVA COLUMNA O CAMPO JSON
+    };
+
     if (impostorsAlive === 0) {
-      // Ganan Nativos
-      await supabase.from('game_state').update({ phase: 'RESULTS' }).eq('room_id', roomId);
+      updatePayload.phase = 'RESULTS';
     } else if (nativesAlive <= impostorsAlive) {
-      // Ganan Impostores por superioridad
-      console.warn('📝 DB WRITE - Cambiando game_state:', { nuevaFase: 'RESULTS', disparadoPor: 'processRoundEnd (Superioridad)' });
-      await supabase.from('game_state').update({ phase: 'RESULTS' }).eq('room_id', roomId);
+      updatePayload.phase = 'RESULTS';
     } else if (gameState.current_round >= gameState.max_rounds) {
-      // Ganan Impostores por supervivencia
-      console.warn('📝 DB WRITE - Cambiando game_state:', { nuevaFase: 'RESULTS', disparadoPor: 'processRoundEnd (Supervivencia)' });
-      await supabase.from('game_state').update({ phase: 'RESULTS' }).eq('room_id', roomId);
+      updatePayload.phase = 'RESULTS';
     } else {
-      // Standby Intermedio (Nadie gana aún, a la siguiente ronda)
       await supabase.from('votes').delete().eq('room_id', roomId);
-      console.warn('📝 DB WRITE - Cambiando game_state:', { nuevaFase: 'ROUND_STANDBY', disparadoPor: 'processRoundEnd' });
-      await supabase.from('game_state').update({ phase: 'ROUND_STANDBY' }).eq('room_id', roomId);
+      updatePayload.phase = 'ROUND_STANDBY';
     }
+
+    await supabase.from('game_state').update(updatePayload).eq('room_id', roomId);
   };
 
   return (
@@ -1707,6 +1715,29 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
   );
 }
 
+function EliminationAnnouncement({ info }: { info: any }) {
+  if (!info) {
+    return (
+      <div className="flex flex-col items-center justify-center py-6 px-12 bg-white/5 border border-white/10 rounded-[30px] mb-4">
+        <span className="font-jetbrains text-sm tracking-[0.4em] text-white/50 uppercase">VOTING RESULT</span>
+        <h3 className="font-sora font-black text-xl text-white tracking-widest uppercase mt-2">IT'S A TIE. NO ONE WAS ELIMINATED.</h3>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`flex flex-col items-center justify-center py-6 px-12 border rounded-[30px] mb-8 animate-in zoom-in-50 duration-500 shadow-2xl ${info.wasImpostor ? 'bg-whapigen-green/10 border-whapigen-green/30 shadow-whapigen-green/20' : 'bg-whapigen-red/10 border-whapigen-red/30 shadow-whapigen-red/20'}`}>
+      <span className="font-jetbrains text-sm tracking-[0.4em] text-white/50 uppercase">VOTING RESULT</span>
+      <h3 className={`font-sora font-black text-2xl tracking-widest uppercase mt-2 ${info.wasImpostor ? 'text-whapigen-green' : 'text-whapigen-red'}`}>
+        {info.nickname} WAS ELIMINATED
+      </h3>
+      <p className="font-jetbrains tracking-[0.3em] text-white/70 uppercase mt-4 text-xs">
+        {info.wasImpostor ? 'THEY WERE AN IMPOSTOR' : 'THEY WERE NOT THE IMPOSTOR'}
+      </p>
+    </div>
+  );
+}
+
 // ---------------- RESULTS PHASE ----------------
 function PhaseResults({ isTeacher, roomId, players }: { isTeacher: boolean, roomId: string, players: any[] }) {
   const { gameState } = useGame();
@@ -1742,6 +1773,8 @@ function PhaseResults({ isTeacher, roomId, players }: { isTeacher: boolean, room
   return (
     <div className="w-full max-w-2xl text-center space-y-12 pt-8 md:pt-48 animate-in zoom-in-50 duration-700 min-h-screen">
       <div className="space-y-6 flex flex-col items-center">
+        {/* ANUNCIO DEL ÚLTIMO VOTO ANTES DE LOS RESULTADOS GLOBALES */}
+        <EliminationAnnouncement info={gameState?.last_eliminated_info} />
         <p className="font-jetbrains text-xs tracking-[0.4em] text-white/70 mb-2">ROUNDS PLAYED: {currentRound}</p>
         <h3 className="text-whapigen-cyan font-jetbrains tracking-[0.3em] text-sm uppercase">MISSION CONCLUDED</h3>
         <h2 className={`text-4xl font-sora font-black uppercase tracking-tighter drop-shadow-md ${impostorWon ? 'text-whapigen-red drop-shadow-neon-red' : 'text-whapigen-green drop-shadow-neon-green'}`}>
@@ -1783,7 +1816,7 @@ function PhaseResults({ isTeacher, roomId, players }: { isTeacher: boolean, room
           onClick={async () => {
             console.warn('📝 DB WRITE - Cambiando game_state:', { nuevaFase: 'LOBBY', disparadoPor: 'Reset Protocol' });
             await supabase.from('players').update({ is_eliminated: false, turn_order: null }).eq('room_id', roomId);
-            await supabase.from('game_state').update({ phase: 'LOBBY', current_turn_index: 0 }).eq('room_id', roomId);
+            await supabase.from('game_state').update({ phase: 'LOBBY', current_turn_index: 0, last_eliminated_info: null }).eq('room_id', roomId);
           }}
           className="px-24 py-6 bg-gradient-to-r from-whapigen-cyan to-purple-600 text-black hover:scale-105 active:scale-95 font-sora font-black tracking-[0.5em] uppercase rounded-full transition-all shadow-2xl mt-12 ring-2 ring-white/10"
         >
@@ -1811,13 +1844,15 @@ function PhaseStandby({ isTeacher, roomId, players, gameState }: { isTeacher: bo
       current_round: gameState.current_round + 1,
       current_turn_index: firstPlayer.turn_order || 0,
       current_turn_player_id: firstPlayer.id,
-      turn_started_at: new Date().toISOString()
+      turn_started_at: new Date().toISOString(),
+      last_eliminated_info: null // <--- LIMPIEZA DE MEMORIA PARA LA NUEVA RONDA
     }).eq('room_id', roomId);
   };
 
   return (
     <div className="w-full max-w-2xl text-center space-y-12 md:mt-48 pt-8 md:pt-0 animate-in zoom-in-50 duration-700 min-h-screen">
       <div className="space-y-4">
+        <EliminationAnnouncement info={gameState?.last_eliminated_info} />
         <h3 className="text-whapigen-cyan font-jetbrains tracking-[0.3em] text-sm uppercase">ROUND {gameState.current_round} CONCLUDED</h3>
         <h2 className="text-4xl md:text-5xl font-sora font-black uppercase tracking-tighter drop-shadow-md text-white">
           AWAITING COORDINATOR
