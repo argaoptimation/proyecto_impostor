@@ -212,22 +212,26 @@ export default function PlayRoom() {
   //  2. Skip if still loading — prevents a false positive on initial mount.
   //  3. Skip if no session — nothing to purge.
   //  4. Skip if players list is empty — transient state, not a confirmed deletion.
+  // ZOMBIE DETECTOR REVISADO (Evita falsos positivos en la carga inicial)
   useEffect(() => {
-    if (isTeacher) return;
-    if (loading) return;
-    if (!studentData?.playerId && !studentData?.nickname) return;
-    if (players.length === 0) return; // transient: wait for real data
+    if (isTeacher || loading) return;
 
+    // Si no hay datos locales, no hay nada que evaluar
+    if (!studentData?.playerId && !studentData?.nickname) return;
+
+    // Si la lista de jugadores está vacía, asumimos que todavía se está descargando de Supabase
+    if (!players || players.length === 0) return;
+
+    // Buscamos si el jugador está en la lista actual
     const isStillInRoom = players.some(p =>
       p.id === studentData?.playerId || p.nickname === studentData?.nickname
     );
 
     if (isStillInRoom) {
+      // Confirmamos que existe en la DB. A partir de ahora, si desaparece, es un zombie real.
       hasBeenSeen.current = true;
-      return;
-    }
-
-    if (hasBeenSeen.current) {
+    } else if (hasBeenSeen.current) {
+      // Solo lo pateamos si ANTES lo habíamos visto y AHORA desapareció.
       console.warn(
         `[ZOMBIE DETECTOR] Player "${studentData?.nickname}" (${studentData?.playerId}) ` +
         `was confirmed in room but is now gone. Auto-purging ghost session.`
@@ -350,7 +354,7 @@ export default function PlayRoom() {
 
   if (loading || !room || !gameState) {
     return (
-      <div className="h-[100dvh] bg-[#050505] flex flex-col items-center justify-center p-8 overflow-x-hidden">
+      <div key="whapigen-system-loader" className="h-[100dvh] bg-[#050505] flex flex-col items-center justify-center p-8 overflow-x-hidden">
         <div className="absolute inset-0 z-0">
           <div className="particles-bg">
             {[...Array(10)].map((_, i) => (
