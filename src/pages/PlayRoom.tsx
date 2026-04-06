@@ -430,13 +430,12 @@ export default function PlayRoom() {
       )}
 
       {/* Top Brand Navigation */}
-      <div className="w-full flex justify-between items-center p-1 relative md:absolute md:top-0 z-[60] pointer-events-none">
-
+      <div className="w-full flex justify-between items-center p-1 relative md:absolute mt-2 md:mt-2 left-2 z-[60] pointer-events-none">
         <button
           onClick={handleLeave}
-          className="pointer-events-auto flex items-center gap-2 text-gray-400 hover:text-white font-jetbrains text-[10px] uppercase tracking-[0.3em] transition-all bg-black/60 backdrop-blur-xl px-8 py-3 rounded-full border border-white/5 hover:border-purple-500/50 hover:shadow-neon-pulse-violet font-black"
+          className="pointer-events-auto flex items-center gap-2 text-gray-400 hover:text-white font-jetbrains text-[10px] uppercase tracking-[0.3em] transition-all bg-black/60 backdrop-blur-xl px-4 md:px-8 py-0.5 rounded-full border border-white/5 hover:border-purple-500/50 hover:shadow-neon-pulse-violet font-black"
         >
-          {isTeacher ? <><Home className="w-7 h-7 md:w-9 h-9" /> Dashboard</> : <><LogOut className="w-7 h-7 md:w-8 h-8 text-whapigen-red" /> Leave Mission</>}
+          {isTeacher ? <><Home className="w-6 h-6 md:w-9 h-9" /> Dashboard</> : <><LogOut className="w-6 h-6 md:w-8 h-8 text-whapigen-red" /> Leave Mission</>}
         </button>
       </div>
 
@@ -452,46 +451,47 @@ export default function PlayRoom() {
         </div>
       )}
 
-      <header className="fixed top-16 md:top-6 left-1/2 -translate-x-1/2 w-[95%] md:w-[60%] z-[60] flex flex-col md:flex-row justify-between items-center p-2 md:p-4 bg-black/40 backdrop-blur-3xl rounded-3xl md:rounded-full border border-white/10 shadow-[0_20px_60px_rgba(0,0,0,0.5)] animate-in slide-in-from-top duration-700 gap-4 md:gap-0">
-        <div className="flex items-center gap-6">
-          <div className="hidden md:flex items-center gap-3">
-            <span className="text-header-premium text-lg font-black tracking-[0.2em] whitespace-nowrap">CIL LENGUAS</span>
-            <div className="w-1 h-6 bg-gradient-to-b from-whapigen-cyan to-purple-600 opacity-30"></div>
-          </div>
-          <div className="flex flex-col gap-2">
-            <h1 className="text-header-premium text-2xl tracking-[0.1em]">
-              {room.code}
-            </h1>
-
-            <div className="flex items-center gap-2 flex-wrap justify-center md:justify-start">
-              <span className="bg-purple-900/40 backdrop-blur-xl border border-purple-500/30 text-gray-300 font-jetbrains text-xs px-3 py-1 rounded-full uppercase tracking-widest shadow-[0_0_15px_rgba(147,51,234,0.3)]">
-                LEVEL {room.level}
-              </span>
-              <span className="bg-cyan-900/40 backdrop-blur-xl border border-cyan-500/30 text-gray-300 font-jetbrains text-xs px-3 py-1 rounded-full uppercase tracking-widest shadow-[0_0_15px_rgba(0,240,255,0.2)]">
-                {room.turn_duration}S TURNS
-              </span>
-
-              <button
-                onClick={() => setShowShareModal(true)}
-                className="flex items-center justify-center gap-2 px-3 py-1 bg-whapigen-cyan/10 border border-whapigen-cyan/40 text-whapigen-cyan hover:bg-whapigen-cyan hover:text-black rounded-full transition-all duration-300 shadow-[0_0_15px_rgba(0,240,255,0.1)] group whitespace-nowrap cursor-pointer"
-              >
-                <QrCode className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" />
-                <span className="font-jetbrains font-black text-[10px] tracking-[0.2em] uppercase mt-0.5">
-                  SHARE
+      {/* HEADER PRINCIPAL: SOLO VISIBLE EN LOBBY */}
+      {gameState.phase === 'LOBBY' && (
+        <header className="fixed top-16 md:top-6 left-1/2 -translate-x-1/2 w-[95%] md:w-[60%] z-[60] flex flex-col md:flex-row justify-between items-center p-2 md:p-4 bg-black/40 backdrop-blur-3xl rounded-3xl md:rounded-full border border-white/10 shadow-[0_20px_60px_rgba(0,0,0,0.5)] animate-in slide-in-from-top duration-700 gap-4 md:gap-0">
+          <div className="flex items-center gap-6">
+            <div className="hidden md:flex items-center gap-3">
+              <span className="text-header-premium text-lg font-black tracking-[0.2em] whitespace-nowrap">CIL LENGUAS</span>
+              <div className="w-1 h-6 bg-gradient-to-b from-whapigen-cyan to-purple-600 opacity-30"></div>
+            </div>
+            <div className="flex flex-col gap-2">
+              <h1 className="text-header-premium text-2xl tracking-[0.1em]">
+                {room.code}
+              </h1>
+              <div className="flex items-center gap-2 flex-wrap justify-center md:justify-start">
+                <span className="bg-purple-900/40 backdrop-blur-xl border border-purple-500/30 text-gray-300 font-jetbrains text-xs px-3 py-1 rounded-full uppercase tracking-widest shadow-[0_0_15px_rgba(147,51,234,0.3)]">
+                  LEVEL {room.level}
                 </span>
-              </button>
+                <span className="bg-cyan-900/40 backdrop-blur-xl border border-cyan-500/30 text-gray-300 font-jetbrains text-xs px-3 py-1 rounded-full uppercase tracking-widest shadow-[0_0_15px_rgba(0,240,255,0.2)]">
+                  {room.turn_duration}S TURNS
+                </span>
+                <button
+                  onClick={() => setShowShareModal(true)}
+                  className="flex items-center justify-center gap-2 px-3 py-1 bg-whapigen-cyan/10 border border-whapigen-cyan/40 text-whapigen-cyan hover:bg-whapigen-cyan hover:text-black rounded-full transition-all duration-300 shadow-[0_0_15px_rgba(0,240,255,0.1)] group whitespace-nowrap cursor-pointer"
+                >
+                  <QrCode className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" />
+                  <span className="font-jetbrains font-black text-[10px] tracking-[0.2em] uppercase mt-0.5">
+                    SHARE
+                  </span>
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-        <div className="flex flex-col items-center md:items-end w-full md:w-auto">
-          <span className="text-whapigen-cyan font-jetbrains text-[10px] tracking-[0.4em] border border-whapigen-cyan/30 bg-whapigen-cyan/10 px-4 py-1.5 rounded-full uppercase font-black animate-pulse shadow-neon-pulse-cyan text-center">
-            PHASE: {gameState.phase.replace('_', ' ')}
-          </span>
-          <span className="text-xs text-white/70 font-jetbrains tracking-[0.2em] mt-2 flex items-center gap-2 font-black justify-center md:justify-end w-full">
-            <Users className="w-3.5 h-3.5 text-whapigen-cyan/50" /> {activePlayers.length} PLAYERS
-          </span>
-        </div>
-      </header>
+          <div className="flex flex-col items-center md:items-end w-full md:w-auto">
+            <span className="text-whapigen-cyan font-jetbrains text-[10px] tracking-[0.4em] border border-whapigen-cyan/30 bg-whapigen-cyan/10 px-4 py-1.5 rounded-full uppercase font-black animate-pulse shadow-neon-pulse-cyan text-center">
+              PHASE: {gameState.phase.replace('_', ' ')}
+            </span>
+            <span className="text-xs text-white/70 font-jetbrains tracking-[0.2em] mt-2 flex items-center gap-2 font-black justify-center md:justify-end w-full">
+              <Users className="w-3.5 h-3.5 text-whapigen-cyan/50" /> {activePlayers.length} PLAYERS
+            </span>
+          </div>
+        </header>
+      )}
 
       {/* ABORT SYSTEM LISTENER — useEffect prevents repeated triggers on re-render */}
       {(() => {
@@ -512,24 +512,25 @@ export default function PlayRoom() {
       )}
 
       {isTeacher && (
-        /* Mantenemos tu posicionamiento intacto */
-        <div className="relative md:fixed md:top-[110px] left-0 right-0 md:left-8 md:right-8 z-[40] p-4 flex flex-col items-center justify-center mx-auto max-w-7xl px-4 md:px-10 mt-36 md:mt-0">
+        /* Mantenemos tu posicionamiento intacto. 
+           Si la fase no es LOBBY, subimos un poco la barra del coordinador en mobile */
+        <div className={`relative md:fixed left-0 right-0 md:left-8 md:right-8 z-[40] p-4 flex flex-col items-center justify-center mx-auto max-w-7xl px-4 md:px-10 ${gameState.phase === 'LOBBY' ? 'md:top-[110px] mt-36 md:mt-0' : 'md:top-[40px]'}`}>
 
-          {/* Contenedor interno con ancho completo y centrado */}
-          <div className="w-full flex flex-col md:flex-row items-center justify-center gap-4 md:gap-12 bg-black/20 md:bg-transparent backdrop-blur-sm md:backdrop-blur-none p-4 rounded-3xl">
+          {/* Contenedor interno: Bajamos gap-4 a gap-1 y p-4 a p-2 en mobile */}
+          <div className="w-full flex flex-col md:flex-row items-center justify-center gap-1 md:gap-12 bg-black/20 md:bg-transparent backdrop-blur-sm md:backdrop-blur-none p-2 md:p-4 rounded-3xl">
 
             {/* Etiqueta del Coordinador */}
-            <div className="flex items-center gap-3 font-jetbrains text-purple-300 font-black tracking-[0.4em] text-[10px] md:text-xs uppercase whitespace-nowrap">
+            <div className="flex items-center mb-2 gap-3 font-jetbrains text-purple-300 font-black tracking-[0.4em] text-[10px] md:text-xs uppercase whitespace-nowrap">
               <div className="w-2 h-2 rounded-full bg-purple-500 animate-pulse shadow-[0_0_10px_#9333ea]"></div>
               COORDINATOR OVERRIDE
             </div>
 
             {gameState.phase !== 'LOBBY' && (
               /* Grupo de Datos: Centrado en mobile, espaciado en desktop */
-              <div className="flex flex-col sm:flex-row items-center gap-6 md:gap-10 font-jetbrains text-[12px] md:text-[14px] tracking-[0.3em] font-black uppercase w-full md:w-auto justify-center">
+              <div className="flex flex-col sm:flex-row items-center gap-2 md:gap-10 font-jetbrains text-[12px] md:text-[14px] tracking-[0.3em] font-black uppercase w-full md:w-auto justify-center">
 
                 {/* WORD */}
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
                   <span className="text-white/40 text-[10px]">WORD:</span>
                   <span className="text-white bg-white/5 px-4 py-1 rounded-full border border-white/5 whitespace-nowrap">
                     {gameState.secret_word || '???'}
@@ -537,7 +538,7 @@ export default function PlayRoom() {
                 </div>
 
                 {/* IMPOSTORS */}
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
                   <span className="text-white/40 text-[10px]">IMPOSTORS:</span>
                   <div className="flex flex-wrap justify-center gap-2">
                     {activePlayers
@@ -557,7 +558,7 @@ export default function PlayRoom() {
                 {/* Botón de Aborto */}
                 <button
                   onClick={handleEndSession}
-                  className="bg-whapigen-red/20 hover:bg-whapigen-red text-whapigen-red hover:text-white px-6 py-2 rounded-full transition-all font-black text-[10px] border border-whapigen-red/30"
+                  className="bg-whapigen-red/20 hover:bg-whapigen-red text-whapigen-red hover:text-white px-4 py-2 rounded-full transition-all font-black text-[10px] border border-whapigen-red/30"
                 >
                   ABORT
                 </button>
@@ -567,7 +568,14 @@ export default function PlayRoom() {
         </div>
       )}
 
-      <main className={`flex-grow pb-32 px-4 md:px-8 flex flex-col items-center justify-start md:justify-center relative z-10 w-full transition-all ${isTeacher ? 'pt-46' : 'pt-28'} ${isTeacher ? 'md:pt-[80px]' : 'md:pt-[0px]'}`}>
+      {/* Ajuste Dinámico de Padding en el Main */}
+      <main className={`flex-grow pb-32 px-4 md:px-8 flex flex-col items-center relative z-10 w-full transition-all duration-500 
+  ${gameState.phase === 'LOBBY' ? (isTeacher ? 'justify-start' : 'justify-start md:justify-center') : 'justify-start'}
+  ${gameState.phase === 'LOBBY'
+          ? (isTeacher ? 'pt-0 md:pt-56' : 'pt-6 pb-8 md:pt-[0px]')
+          : (isTeacher ? 'pt-0 md:pt-30' : 'pt-0 md:pt-0')
+        }
+`}>
         {(() => {
           switch (gameState.phase) {
             case 'LOBBY': return <PhaseLobby isTeacher={isTeacher} roomId={roomId!} players={activePlayers} roomLevel={room.level} />;
@@ -581,7 +589,7 @@ export default function PlayRoom() {
         })()}
       </main>
 
-      <footer className="relative md:fixed md:bottom-2 left-0 right-0 z-50 flex flex-col items-center gap-4 md:transform md:translate-y-2 pointer-events-none mt-auto pb-8 md:pb-0">
+      <footer className="relative md:fixed md:bottom-2 left-0 right-0 z-50 flex flex-col items-center gap-4 md:transform md:translate-y-2 pointer-events-none mt-auto pb-4 md:pb-0">
         <p className="text-[10px] font-jetbrains text-white/70 tracking-[0.6em] uppercase font-black px-4 text-center">
           POWERED BY <span className="bg-gradient-to-r from-whapigen-cyan to-purple-500 bg-clip-text text-transparent italic">WHAPIGEN</span> // AI AUTOMATION SYSTEMS
         </p>
@@ -746,7 +754,7 @@ function PhaseLobby({ isTeacher, roomId, players, roomLevel }: { isTeacher: bool
   const [showBriefing, setShowBriefing] = useState(false);
 
   return (
-    <div className="relative z-40 md:z-auto w-full max-w-2xl text-center space-y-8 pt-28 md:pt-56 animate-in fade-in duration-500">
+    <div className="relative z-40 md:z-auto w-full max-w-2xl text-center space-y-4 pt-0 animate-in fade-in duration-500">
 
       <div className="mb-8 relative">
         <Target className="w-24 h-24 mx-auto text-whapigen-cyan/20 absolute -top-4 left-1/2 -translate-x-1/2 -rotate-45" />
@@ -766,7 +774,7 @@ function PhaseLobby({ isTeacher, roomId, players, roomLevel }: { isTeacher: bool
         </button>
       </div>
 
-      <div className="relative z-[1] pointer-events-auto bg-black/95 backdrop-blur-xl border border-white/5 p-12 min-h-[300px] w-full max-w-4xl flex flex-wrap gap-4 items-center justify-center rounded-[40px] shadow-[0_30px_100px_rgba(0,0,0,0.8)] overflow-x-hidden">
+      <div className="relative z-[1] pointer-events-auto bg-black/95 backdrop-blur-xl border border-white/10 p-6 min-h-[80px] w-full max-w-4xl flex flex-wrap gap-4 items-center justify-center rounded-[40px] shadow-[0_30px_100px_rgba(0,0,0,0.8)] overflow-x-hidden">
         <div className="particles-bg opacity-30">
           {[...Array(15)].map((_, i) => (
             <div
@@ -790,7 +798,7 @@ function PhaseLobby({ isTeacher, roomId, players, roomLevel }: { isTeacher: bool
           </div>
         ) : (
           [...players].sort((a, b) => a.nickname.localeCompare(b.nickname)).map(p => (
-            <div key={p.id} className="bg-black/40 backdrop-blur-xl border border-white/10 text-white px-6 py-3 flex items-center gap-4 font-jetbrains text-xs tracking-[0.2em] rounded-full animate-in zoom-in-50 duration-500 group shadow-lg hover:shadow-neon-pulse-cyan hover:border-whapigen-cyan/30 transition-all font-black" style={{ transform: 'translateZ(0)' }}>
+            <div key={p.id} className={`text-[10px] flex items-center gap-1.5 md:gap-2 px-3 py-1.5 md:px-4 md:py-2 font-jetbrains rounded-full transition-all shadow-xl font-bold uppercase tracking-[0.2em] relative group/kick backdrop-blur-xl ${p.is_eliminated ? 'bg-black/20 text-white/10 grayscale opacity-40' : 'bg-white/5 border border-white/5 text-white hover:border-purple-500/30 hover:shadow-neon-pulse-violet'}`} style={{ transform: 'translateZ(0)' }}>
               <div className="w-3 h-3 rounded-full bg-whapigen-cyan animate-pulse shadow-neon-pulse-cyan"></div>
               {p.nickname}
               {isTeacher && (
@@ -1006,13 +1014,13 @@ function PhaseReveal({ isTeacher, roomId, players }: { isTeacher: boolean, roomI
 
   if (isTeacher) {
     return (
-      <div className="text-center font-jetbrains w-full max-w-md space-y-8 animate-in slide-in-from-bottom-4 pt-[140px]">
+      <div className="text-center font-jetbrains w-full max-w-md space-y-4 animate-in slide-in-from-bottom-4 md:pt-32">
         <h2 className="text-2xl font-sora font-bold text-white uppercase text-whapigen-cyan drop-shadow-neon-cyan mb-8">ROLE DISTRIBUTED</h2>
-        <div className="bg-white/[0.03] backdrop-blur-xl border border-white/10 rounded-[40px] text-center p-20 shadow-2xl w-full max-w-lg group">
-          <div className="mb-10 p-5 rounded-full bg-white/5 inline-block group-hover:bg-whapigen-cyan/10 transition-colors">
+        <div className="bg-white/[0.03] backdrop-blur-xl border border-white/10 rounded-[40px] text-center p-6 shadow-2xl w-full max-w-lg group">
+          <div className="mb-6 p-5 rounded-full bg-white/5 inline-block group-hover:bg-whapigen-cyan/10 transition-colors">
             <Loader2 className="w-10 h-10 text-whapigen-cyan animate-spin" />
           </div>
-          <p className="text-white text-xs font-jetbrains font-black tracking-[0.5em] mb-12 uppercase animate-pulse">AWAITING CONFIRMATION...</p>
+          <p className="text-white text-xs font-jetbrains font-black tracking-[0.5em] mb-6 uppercase animate-pulse">AWAITING CONFIRMATION...</p>
           <button
             onClick={beginSpeaking}
             className="w-full h-20 bg-gradient-to-r from-whapigen-cyan to-purple-600 text-black hover:scale-105 active:scale-95 font-sora font-black tracking-[0.3em] transition-all rounded-full uppercase shadow-2xl ring-2 ring-white/10"
@@ -1029,7 +1037,7 @@ function PhaseReveal({ isTeacher, roomId, players }: { isTeacher: boolean, roomI
       <h2 className="text-3xl font-sora font-extrabold text-white uppercase tracking-wider shadow-md">TOP SECRET DATA</h2>
 
       <div
-        className={`bg-black/60 backdrop-blur-xl p-8 md:p-16 transition-all duration-700 relative cursor-pointer group select-none overflow-x-hidden rounded-[40px] border shadow-[0_30px_50px_rgba(0,0,0,0.5)] flex items-center justify-center min-h-[200px] md:min-h-[250px] w-full z-50 animate-pulse-slow ${revealed ? 'border-whapigen-cyan shadow-neon-pulse-cyan' : 'border-white/5 hover:border-purple-500/30 shadow-neon-pulse-violet'}`}
+        className={`bg-black/60 backdrop-blur-xl p-8 md:p-16 transition-all duration-700 relative cursor-pointer group select-none overflow-x-hidden rounded-[40px] border shadow-[0_30px_50px_rgba(0,0,0,0.5)] flex items-center justify-center min-h-[200px] md:min-h-[250px] w-full z-50 animate-pulse-slow ${revealed ? 'border-whapigen-cyan shadow-neon-pulse-cyan' : 'border-white/25 hover:border-purple-500/30 shadow-neon-pulse-violet'}`}
         onClick={() => setRevealed(prev => !prev)}
       >
         <div className="absolute inset-0 bg-digital-grid bg-[length:60px_60px] opacity-[0.03] pointer-events-none"></div>
@@ -1223,23 +1231,23 @@ function PhaseSpeaking({ isTeacher, room, gameState, players }: { isTeacher: boo
   };
 
   return (
-    <div className="flex flex-col items-center justify-center gap-2 w-full pt-2 md:pt-40 animate-in zoom-in-95 duration-500 min-h-[70vh]">
+    <div className="flex flex-col items-center justify-center gap-2 w-full md:pt-48 animate-in zoom-in-95 duration-500 min-h-[50vh]">
       <div className="text-center space-y-2 px-4">
-        <h3 className="text-whapigen-cyan font-jetbrains tracking-[0.3em] text-xs md:text-sm uppercase">
+        <h3 className="text-whapigen-cyan font-jetbrains tracking-[0.2em] pt-4 text-xs md:text-sm uppercase">
           {currentPlayer?.id === studentData?.playerId ? (
             <span key="your-turn" className="animate-pulse shadow-neon-pulse-cyan px-4 py-1 rounded-full border border-whapigen-cyan/30">YOUR TURN TO OPERATE</span>
           ) : (
             <span key="waiting-for" className="text-white/70">{`WAITING FOR ${currentPlayer?.nickname || '...'}`}</span>
           )}
         </h3>
-        <h2 className={`text-4xl md:text-6xl font-sora font-bold text-white uppercase transition-all duration-500 flex items-center justify-center gap-4 ${currentPlayer?.id === studentData?.playerId ? 'border-neon-active p-8 rounded-[40px] bg-whapigen-cyan/5 scale-95' : 'drop-shadow-neon-cyan opacity-80'}`}>
+        <h2 className={`text-3xl md:text-6xl font-sora font-bold text-white uppercase transition-all duration-500 flex items-center justify-center gap-2 ${currentPlayer?.id === studentData?.playerId ? 'border-neon-active p-8 rounded-[40px] bg-whapigen-cyan/5 scale-95' : 'drop-shadow-neon-cyan opacity-80'}`}>
           {currentPlayer?.id === studentData?.playerId ? <span key="arrow-left" className="arrow-indicator">{">>"}</span> : null}
           <span key="player-name">{currentPlayer?.nickname || 'UNKNOWN'}</span>
           {currentPlayer?.id === studentData?.playerId ? <span key="arrow-right" className="arrow-indicator">{"<<"}</span> : null}
         </h2>
       </div>
 
-      <div className="relative w-64 h-64 flex items-center justify-center">
+      <div className="relative w-48 h-48 md:w-64 md:h-64 flex items-center justify-center">
         {/* Glow behind :Degradado radial nativo para evitar el corte cuadrado */}
         <div className="absolute -inset-24 bg-[radial-gradient(circle,rgba(0,240,255,0.25)_0%,transparent_60%)] pointer-events-none"></div>
         <svg className="absolute w-full h-full -rotate-90 overflow-visible" viewBox="0 0 100 100">
@@ -1274,27 +1282,31 @@ function PhaseSpeaking({ isTeacher, room, gameState, players }: { isTeacher: boo
       )}
 
       {isTeacher && (
-        <div className="flex flex-col items-center gap-10 mt-8 w-full">
-          <div className="flex gap-8">
+        <div className="flex flex-col items-center gap-6 mt-8 w-full md:w-[80%] mx-auto">
+          {/* BOTONES DE CONTROL */}
+          <div className="flex gap-3 md:gap-6">
             <button
               onClick={togglePause}
-              className={`px-16 py-5 rounded-full font-sora text-[10px] tracking-[0.3em] font-black transition-all uppercase shadow-lg ${gameState.is_paused ? 'bg-gradient-to-r from-green-400 to-green-600 text-black shadow-[0_15px_40px_rgba(34,197,94,0.3)] hover:scale-105' : 'bg-white/5 border border-white/10 text-whapigen-cyan hover:bg-whapigen-cyan hover:text-black hover:shadow-neon-cyan/50'}`}
+              className={`px-6 py-4 rounded-full font-sora text-[10px] tracking-[0.3em] font-black transition-all uppercase shadow-lg ${gameState.is_paused ? 'bg-gradient-to-r from-green-400 to-green-600 text-black shadow-[0_15px_40px_rgba(34,197,94,0.3)] hover:scale-105' : 'bg-white/5 border border-white/10 text-whapigen-cyan hover:bg-whapigen-cyan hover:text-black hover:shadow-neon-cyan/50'}`}
             >
               <span style={{ pointerEvents: 'none' }}>{gameState.is_paused ? 'Resume Mission' : 'Pause'}</span>
             </button>
             <button
               onClick={handleNextTurn}
-              className="bg-whapigen-red/10 border border-whapigen-red/30 text-whapigen-red hover:bg-whapigen-red hover:text-white px-16 py-5 rounded-full font-sora text-[10px] tracking-[0.3em] font-black transition-all uppercase shadow-lg hover:shadow-neon-red/40"
+              className="bg-whapigen-red/10 border border-whapigen-red/30 text-whapigen-red hover:bg-whapigen-red hover:text-white px-6 py-4 rounded-full font-sora text-[10px] tracking-[0.3em] font-black transition-all uppercase shadow-lg hover:shadow-neon-red/40"
             >
               Force Skip
             </button>
           </div>
 
-          <div className="relative z-[1] pointer-events-auto flex flex-wrap gap-4 justify-center max-w-4xl px-12 animate-in fade-in border-t border-white/5 pt-16 w-full mt-8 mb-20">
+          {/* LISTA DE JUGADORES AJUSTADA PARA 2 POR FILA EN MOBILE */}
+          <div className="relative z-[1] pointer-events-auto grid grid-cols-2 md:flex md:flex-wrap gap-2 md:gap-4 justify-items-center md:justify-center max-w-4xl px-2 md:px-8 animate-in fade-in border-t border-white/5 pt-0 md:pt-16 w-full mt-0 mb-0">
             {[...players].filter((p: any) => !p.is_host).sort((a: any, b: any) => a.nickname.localeCompare(b.nickname)).map((p: any) => (
-              <div key={p.id} className={`text-[10px] flex items-center gap-4 px-6 py-3 font-jetbrains rounded-full transition-all shadow-xl font-bold uppercase tracking-[0.2em] relative group/kick backdrop-blur-xl ${p.is_eliminated ? 'bg-black/20 text-white/10 grayscale opacity-40' : 'bg-white/5 border border-white/5 text-purple-400/80 hover:border-purple-500/30 hover:shadow-neon-pulse-violet'}`} style={{ transform: 'translateZ(0)' }}>
-                <div className={`w-2 h-2 rounded-full ${p.is_eliminated ? 'bg-gray-800' : 'bg-purple-500 shadow-neon-pulse-violet'}`}></div>
-                <span className={p.is_eliminated ? 'line-through' : ''}>{p.nickname}</span>
+              <div key={p.id} className={`text-[10px] flex items-center justify-between gap-1.5 px-3 py-2 w-full md:w-auto font-jetbrains rounded-full transition-all shadow-xl font-bold uppercase tracking-[0.1em] md:tracking-[0.2em] relative group/kick backdrop-blur-xl ${p.is_eliminated ? 'bg-black/20 text-white/10 grayscale opacity-40' : 'bg-white/5 border border-white/5 text-white hover:border-purple-500/30 hover:shadow-neon-pulse-violet'}`} style={{ transform: 'translateZ(0)' }}>
+                <div className="flex items-center gap-1.5 truncate">
+                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${p.is_eliminated ? 'bg-gray-800' : 'bg-purple-500 shadow-neon-pulse-violet'}`}></div>
+                  <span className={`truncate ${p.is_eliminated ? 'line-through' : ''}`}>{p.nickname}</span>
+                </div>
                 {!p.is_eliminated && (
                   <button
                     onClick={async (e) => {
@@ -1304,29 +1316,27 @@ function PhaseSpeaking({ isTeacher, room, gameState, players }: { isTeacher: boo
                       console.log('🛑 KICK INTENT:', p.id);
                       await supabase.from('players').delete().eq('id', p.id);
 
-                      // Send explicit broadcast to stop auto-rejoin
                       const ch = supabase.channel(`kick:${p.id}:${Date.now()}`);
                       ch.subscribe((status) => {
                         if (status === 'SUBSCRIBED') {
                           ch.send({ type: 'broadcast', event: 'KICK_ABS', payload: { target: p.id } })
                             .then(() => {
                               supabase.removeChannel(ch);
-                              refreshPlayers(); // Update Admin UI immediately
+                              refreshPlayers();
                             });
                         }
                       });
                     }}
-                    className="relative z-[9999] pointer-events-auto cursor-pointer text-whapigen-red/30 hover:text-whapigen-red hover:scale-125 transition-all ml-2 p-1 bg-white/5 rounded-full border border-white/5 shadow-neon-pulse-red"
+                    className="relative z-[9999] pointer-events-auto cursor-pointer text-whapigen-red/30 hover:text-whapigen-red hover:scale-125 transition-all ml-1 p-1 bg-white/5 rounded-full border border-white/5 shadow-neon-pulse-red flex-shrink-0"
                     title="Kick Player"
                   >
-                    <X className="w-3.5 h-3.5" style={{ pointerEvents: 'none' }} />
+                    <X className="w-3 h-3" style={{ pointerEvents: 'none' }} />
                   </button>
                 )}
               </div>
             ))}
           </div>
         </div>
-
       )}
     </div>
   );
@@ -1590,9 +1600,9 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
   };
 
   return (
-    <div className="w-full max-w-4xl text-center flex flex-col items-center gap-8 pt-8 md:pt-0 animate-in slide-in-from-bottom-8 min-h-screen">
-      <div className="flex flex-col md:flex-row items-center justify-center gap-20 w-full bg-black/40 backdrop-blur-xl p-20 rounded-[40px] border border-white/5 shadow-[0_40px_100px_rgba(0,0,0,0.4)] animate-pulse-slow shadow-neon-pulse-violet">
-        <div className="relative w-56 h-56 flex items-center justify-center">
+    <div className="w-full max-w-4xl text-center flex flex-col items-center gap-0 pt-0 animate-in slide-in-from-bottom-8 min-h-fit">
+      <div className="flex flex-col md:flex-row items-center justify-center gap-0 md:gap-10 w-full bg-black/40 backdrop-blur-xl p-4 md:p-8 rounded-[40px] border border-white/10 shadow-[0_40px_100px_rgba(0,0,0,0.4)] animate-pulse-slow shadow-neon-pulse-violet">
+        <div className="relative w-20 h-20 md:w-56 md:h-56 flex items-center justify-center">
           <svg className="absolute w-full h-full -rotate-90" viewBox="0 0 100 100">
             <circle cx="50" cy="50" r="46" fill="none" stroke="rgba(255,255,255,0.03)" strokeWidth="4" />
             <circle
@@ -1608,24 +1618,21 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
               className={displayTime <= 5 ? 'animate-pulse' : ''}
             />
           </svg>
-          <div className={`relative z-10 text-6xl font-jetbrains font-black text-white ${displayTime <= 5 ? 'text-[#ff003c] animate-pulse drop-shadow-neon-red' : 'drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]'}`}>
+          <div className={`relative z-10 text-4xl md:text-6xl font-jetbrains font-black text-white ${displayTime <= 5 ? 'text-[#ff003c] animate-pulse drop-shadow-neon-red' : 'drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]'}`}>
             {displayTime}
           </div>
         </div>
 
-        <div className="space-y-6 text-left max-w-lg">
-          <div className="flex items-center gap-4 md:pt-20 text-purple-500 drop-shadow-neon-violet animate-pulse mb-2">
-            <Crosshair className="w-10 h-10" />
-            <span className="font-jetbrains text-xs tracking-[0.8em] font-black uppercase ml-2">It's time to vote!</span>
+        <div className="space-y-4 text-left max-w-lg">
+          <div className="flex items-center gap-2 pt-2 text-purple-500 drop-shadow-neon-violet animate-pulse mb-2">
+            <Crosshair className="w-5 md:w-8 h-5 md:h-8" />
+            <span className="font-jetbrains text-xs tracking-[0.4em] font-black uppercase ml-2">It's time to vote!</span>
           </div>
-          <h2 className="text-6xl font-black font-sora text-white uppercase tracking-tighter leading-none mb-4">Eliminate <br /><span className="bg-gradient-to-r from-whapigen-cyan to-purple-400 bg-clip-text text-transparent">The Impostor</span></h2>
-          <p className="text-white/70 font-jetbrains text-xs tracking-[0.4em] font-black uppercase leading-relaxed max-w-sm">
-            {isTeacher ? 'Monitoring mission consensus signals...' : isSpectator ? 'SPECTATOR MODE // Awaiting next mission' : (hasVoted ? 'Action Secured. Awaiting mission verdict' : 'think of a suspected impostor and cast your veredict')}
-          </p>
+          <h2 className="text-2xl md:text-4xl font-black font-sora text-white uppercase tracking-tighter leading-none mb-4">Eliminate <br /><span className="bg-gradient-to-r from-whapigen-cyan to-purple-400 bg-clip-text text-transparent">The Impostor</span></h2>
           {isTeacher && (
             <button
               onClick={togglePause}
-              className={`mt-10 px-12 py-5 rounded-full font-sora text-[10px] tracking-[0.4em] transition-all font-black uppercase shadow-2xl overflow-x-hidden relative group/pause ${gameState.is_paused ? 'bg-gradient-to-r from-green-400 to-green-600 text-black shadow-[0_20px_50px_rgba(34,197,94,0.3)]' : 'bg-white/5 border border-white/10 text-whapigen-cyan hover:bg-whapigen-cyan hover:text-black hover:shadow-neon-cyan/50'}`}
+              className={`mt-12 px-12 py-5 rounded-full font-sora text-[10px] tracking-[0.4em] transition-all font-black uppercase shadow-2xl overflow-x-hidden relative group/pause ${gameState.is_paused ? 'bg-gradient-to-r from-green-400 to-green-600 text-black shadow-[0_20px_50px_rgba(34,197,94,0.3)]' : 'bg-white/5 border border-white/10 text-whapigen-cyan hover:bg-whapigen-cyan hover:text-black hover:shadow-neon-cyan/50'}`}
             >
               <span style={{ pointerEvents: 'none' }}>{gameState.is_paused ? 'Resume Voting' : 'Pause Protocol'}</span>
             </button>
@@ -1633,7 +1640,7 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 w-full px-4">
+      <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-4 w-full mt-2 px-0 md:px-4">
         {[...alivePlayers].sort((a: any, b: any) => a.nickname.localeCompare(b.nickname)).map((p: any) => {
           const voteCount = votes.filter(v => v.target_id === p.id).length;
           const isMe = p.id === studentData?.playerId;
@@ -1641,7 +1648,7 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
           return (
             <div
               key={p.id}
-              className={`px-6 py-4 bg-black/40 backdrop-blur-xl border transition-all duration-700 flex flex-col items-center justify-between rounded-[30px] shadow-2xl relative overflow-x-hidden group/card animate-pulse-slow ${voteCount > 0 ? 'border-whapigen-red shadow-[0_0_80px_rgba(255,49,49,0.15)] bg-whapigen-red/5' : 'border-white/5 hover:border-whapigen-cyan/30'}`}
+              className={`px-2 md:px-12 py-4 bg-black/40 backdrop-blur-xl border transition-all duration-700 flex flex-col items-center justify-between rounded-[30px] shadow-2xl relative overflow-x-hidden group/card animate-pulse-slow ${voteCount > 0 ? 'border-whapigen-red shadow-[0_0_80px_rgba(255,49,49,0.15)] bg-whapigen-red/5' : 'border-white/10 hover:border-whapigen-cyan/30'}`}
             >
               <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-whapigen-cyan to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity"></div>
               <div className="relative z-10 flex flex-col items-center w-full">
@@ -1651,7 +1658,7 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
                 <p className="text-white font-sora tracking-tighter font-black uppercase text-2xl group-hover/card:text-whapigen-cyan transition-colors">{p.nickname}</p>
                 {isTeacher && (
                   <div className="flex flex-col items-center gap-4 mt-4 w-full">
-                    <span className="text-white font-black font-jetbrains text-xs tracking-[0.5em] uppercase px-6 py-2 rounded-full border border-white/5 bg-white/5">
+                    <span className="text-white font-black font-jetbrains text-xs tracking-[0.3em] uppercase md:px-6 px-4 py-2 rounded-full border border-white/5 bg-white/5">
                       Votes: {voteCount}
                     </span>
                     <button
@@ -1670,7 +1677,7 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
                           }
                         });
                       }}
-                      className="relative z-[9999] pointer-events-auto text-whapigen-red/70 hover:text-white transition-all bg-white/5 hover:bg-whapigen-red border border-white/10 hover:border-whapigen-red px-6 py-2 rounded-full text-[9px] font-black tracking-[0.4em] w-full uppercase"
+                      className="relative z-[9999] pointer-events-auto text-whapigen-red/70 hover:text-white transition-all bg-white/5 hover:bg-whapigen-red border border-white/10 hover:border-whapigen-red md:px-4 px-0 py-1 rounded-full text-[9px] font-black tracking-[0.4em] w-full uppercase"
                     >
                       Kick System
                     </button>
@@ -1687,7 +1694,7 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
                       handleVote(p.id);
                     }}
                     disabled={hasVoted}
-                    className={`relative z-50 pointer-events-auto w-full font-sora text-[11px] tracking-[0.4em] py-5 rounded-3xl transition-all font-black uppercase shadow-[0_8px_0_#4c1d95] ${hasVoted ? 'bg-white/5 text-white/10 border border-white/5 translate-y-2 shadow-none cursor-default' : 'bg-gradient-to-br from-purple-600 to-purple-800 text-white border-t border-purple-400/30 hover:-translate-y-1 hover:shadow-neon-pulse-violet active:translate-y-2 active:shadow-none'}`}
+                    className={`relative z-50 pointer-events-auto w-full font-sora text-[11px] tracking-[0.4em] py-2 rounded-3xl transition-all font-black uppercase shadow-[0_8px_0_#4c1d95] ${hasVoted ? 'bg-white/5 text-white/10 border border-white/5 translate-y-2 shadow-none cursor-default' : 'bg-gradient-to-br from-purple-600 to-purple-800 text-white border-t border-purple-400/30 hover:-translate-y-1 hover:shadow-neon-pulse-violet active:translate-y-2 active:shadow-none'}`}
                     style={{ transform: 'translateZ(0)' }}
                   >
                     <span style={{ pointerEvents: 'none' }}>{hasVoted ? 'Voted' : 'VOTE'}</span>
@@ -1722,7 +1729,7 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
 function EliminationAnnouncement({ info }: { info: any }) {
   if (!info) {
     return (
-      <div className="flex flex-col items-center justify-center py-6 px-12 bg-white/5 border border-white/10 rounded-[30px] mb-4">
+      <div className="flex flex-col items-center justify-center py-2 md:py-6 px-6 md:px-12 bg-white/5 border border-white/10 rounded-[30px] mb-4">
         <span className="font-jetbrains text-sm tracking-[0.4em] text-white/50 uppercase">VOTING RESULT</span>
         <h3 className="font-sora font-black text-xl text-white tracking-widest uppercase mt-2">IT'S A TIE. NO ONE WAS ELIMINATED.</h3>
       </div>
@@ -1730,9 +1737,9 @@ function EliminationAnnouncement({ info }: { info: any }) {
   }
 
   return (
-    <div className={`flex flex-col items-center justify-center py-6 px-12 border rounded-[30px] mb-8 animate-in zoom-in-50 duration-500 shadow-2xl ${info.wasImpostor ? 'bg-whapigen-green/10 border-whapigen-green/30 shadow-whapigen-green/20' : 'bg-whapigen-red/10 border-whapigen-red/30 shadow-whapigen-red/20'}`}>
+    <div className={`flex flex-col items-center justify-center py-2 md:py-6 px-6 md:px-12 border rounded-[30px] mb-8 animate-in zoom-in-50 duration-500 shadow-2xl ${info.wasImpostor ? 'bg-whapigen-green/10 border-whapigen-green/30 shadow-whapigen-green/20' : 'bg-whapigen-red/10 border-whapigen-red/30 shadow-whapigen-red/20'}`}>
       <span className="font-jetbrains text-sm tracking-[0.4em] text-white/50 uppercase">VOTING RESULT</span>
-      <h3 className={`font-sora font-black text-2xl tracking-widest uppercase mt-2 ${info.wasImpostor ? 'text-whapigen-green' : 'text-whapigen-red'}`}>
+      <h3 className={`font-sora font-black text-xl md:text-2xl tracking-widest uppercase mt-2 ${info.wasImpostor ? 'text-whapigen-green' : 'text-whapigen-red'}`}>
         {info.nickname} WAS ELIMINATED
       </h3>
       <p className="font-jetbrains tracking-[0.3em] text-white/70 uppercase mt-4 text-xs">
@@ -1775,23 +1782,23 @@ function PhaseResults({ isTeacher, roomId, players }: { isTeacher: boolean, room
   const titleText = impostorWon ? (isPlural ? 'IMPOSTORS WIN' : 'IMPOSTOR WINS') : 'PLAYERS WIN';
 
   return (
-    <div className="w-full max-w-2xl text-center space-y-12 pt-8 md:pt-48 animate-in zoom-in-50 duration-700 min-h-screen">
-      <div className="space-y-6 flex flex-col items-center">
+    <div className="w-full max-w-2xl text-center space-y-4 md:space-y-12 pt-2 md:pt-28 animate-in zoom-in-50 duration-700 min-h-screen">
+      <div className="space-y-2 md:space-y-6 flex flex-col items-center">
         {/* ANUNCIO DEL ÚLTIMO VOTO ANTES DE LOS RESULTADOS GLOBALES */}
         <EliminationAnnouncement info={gameState?.last_eliminated_info} />
         <p className="font-jetbrains text-xs tracking-[0.4em] text-white/70 mb-2">ROUNDS PLAYED: {currentRound}</p>
         <h3 className="text-whapigen-cyan font-jetbrains tracking-[0.3em] text-sm uppercase">MISSION CONCLUDED</h3>
-        <h2 className={`text-4xl font-sora font-black uppercase tracking-tighter drop-shadow-md ${impostorWon ? 'text-whapigen-red drop-shadow-neon-red' : 'text-whapigen-green drop-shadow-neon-green'}`}>
+        <h2 className={`text-3xl md:text-4xl font-sora font-black uppercase tracking-tighter drop-shadow-md ${impostorWon ? 'text-whapigen-red drop-shadow-neon-red' : 'text-whapigen-green drop-shadow-neon-green'}`}>
           {titleText}
         </h2>
-        <p className="text-white/70 font-jetbrains text-lg tracking-[0.4em] uppercase pt-4 opacity-70">
+        <p className="text-white/70 font-jetbrains text-lg tracking-[0.1em] uppercase pt-4 opacity-70">
           {impostorText}
         </p>
       </div>
 
       {/* Scoreboard */}
-      <div className="bg-black/60 backdrop-blur-xl border border-white/10 rounded-[40px] p-8 md:p-16 mt-8 md:mt-12 shadow-[0_40px_100px_rgba(0,0,0,0.5)] w-full max-w-2xl transform hover:scale-[1.02] transition-transform duration-700 shadow-neon-pulse-cyan">
-        <h3 className="text-white font-black font-jetbrains tracking-[0.4em] md:tracking-[0.8em] text-sm md:text-lg mb-3 md:mb-3 border-b border-white/5 pb-6 uppercase text-center w-full">
+      <div className="bg-black/60 backdrop-blur-xl border border-white/10 rounded-[40px] p-4 md:p-8 mt-4 md:mt-4 shadow-[0_40px_100px_rgba(0,0,0,0.5)] w-full max-w-2xl transform hover:scale-[1.02] transition-transform duration-700 shadow-neon-pulse-cyan">
+        <h3 className="text-white font-black font-jetbrains tracking-[0.4em] md:tracking-[0.8em] text-sm md:text-lg mb-0 md:mb-3 border-b border-white/5 pb-6 uppercase text-center w-full">
           Scoreboard
         </h3>
         <div className="flex flex-col gap-2">
@@ -1799,9 +1806,9 @@ function PhaseResults({ isTeacher, roomId, players }: { isTeacher: boolean, room
             .filter((p: any) => !p.is_host)
             .sort((a: any, b: any) => (b.score - a.score) || a.nickname.localeCompare(b.nickname))
             .map((p: any) => (
-              <div key={p.id} className="flex justify-between items-center bg-white/[0.03] p-6 rounded-[30px] border border-white/5 transition-all hover:bg-white/[0.06] hover:border-whapigen-cyan/20 group/row group relative overflow-x-hidden">
+              <div key={p.id} className="flex justify-between items-center bg-white/[0.03] p-1 rounded-[30px] border border-white/5 transition-all hover:bg-white/[0.06] hover:border-whapigen-cyan/20 group/row group relative overflow-x-hidden">
                 <div className="absolute inset-0 bg-gradient-to-r from-whapigen-cyan/5 to-transparent opacity-0 group-hover/row:opacity-100 transition-opacity"></div>
-                <div className="flex items-center gap-2 md:gap-6 relative z-10">
+                <div className="flex items-center gap-2 md:gap-4 relative z-10">
                   <div className={`w-3 h-3 rounded-full ${p.is_eliminated ? 'bg-gray-800' : 'bg-whapigen-cyan shadow-neon-cyan'}`}></div>
                   <span className={`font-sora tracking-tighter text-xl uppercase ${p.is_eliminated ? 'text-white/20 line-through' : 'text-white font-black'}`}>{p.nickname}</span>
                 </div>
@@ -1822,7 +1829,7 @@ function PhaseResults({ isTeacher, roomId, players }: { isTeacher: boolean, room
             await supabase.from('players').update({ is_eliminated: false, turn_order: null }).eq('room_id', roomId);
             await supabase.from('game_state').update({ phase: 'LOBBY', current_turn_index: 0, last_eliminated_info: null }).eq('room_id', roomId);
           }}
-          className="px-24 py-6 bg-gradient-to-r from-whapigen-cyan to-purple-600 text-black hover:scale-105 active:scale-95 font-sora font-black tracking-[0.5em] uppercase rounded-full transition-all shadow-2xl mt-12 ring-2 ring-white/10"
+          className="px-24 py-2 md:py-6 bg-gradient-to-r from-whapigen-cyan to-purple-600 text-black hover:scale-105 active:scale-95 font-sora font-black tracking-[0.5em] uppercase rounded-full transition-all shadow-2xl mt-12 ring-2 ring-white/10"
         >
           RESET GAME
         </button>
@@ -1913,19 +1920,19 @@ function PersistentWordBar({ role, secretWord, hintsEnabled, hints, phaseStarted
 
   return (
     <div
-      className="relative md:fixed md:top-[153px] md:left-1/2 md:-translate-x-1/2 z-[80] bg-black/60 backdrop-blur-xl border border-white/5 text-whapigen-cyan font-jetbrains px-8 md:px-12 py-3 md:py-5 rounded-full shadow-[0_30px_60px_rgba(0,0,0,0.5)] cursor-pointer select-none max-w-[85vw] mx-auto md:mx-0 transition-all hover:bg-white/5 group/word ring-1 ring-white/10 mt-4"
+      className="relative md:fixed md:top-8 md:left-1/2 md:-translate-x-1/2 z-[80] bg-black/60 backdrop-blur-xl border border-white/5 text-whapigen-cyan font-jetbrains px-2 py-2 rounded-[2rem] shadow-[0_30px_60px_rgba(0,0,0,0.5)] cursor-pointer select-none max-w-[85vw] mx-auto md:mx-0 transition-all hover:bg-white/5 group/word ring-1 ring-white/10 mt-4"
       onClick={() => setRevealed(prev => !prev)}
     >
       <div className="absolute inset-0 bg-digital-grid bg-[length:20px_20px] opacity-[0.01] pointer-events-none"></div>
       {!revealed ? (
-        <div className="flex items-center gap-4 font-black tracking-[0.3em] text-[10px] ml-[0.3em] group-hover/word:text-whapigen-cyan transition-colors">
+        <div className="flex items-center gap-4 font-black tracking-[0.1em] text-[10px] ml-[0.3em] group-hover/word:text-whapigen-cyan transition-colors">
           <EyeOff className="w-4 h-4 text-white/20 group-hover/word:text-whapigen-cyan transition-all" />
-          <span className="text-white/70 font-sora text-sm md:text-xs uppercase group-hover/word:text-white transition-colors animate-pulse">TOUCH TO REVEAL</span>
+          <span className="text-white/70 font-sora text-lg md:text-lg uppercase group-hover/word:text-white transition-colors animate-pulse">TOUCH TO REVEAL</span>
         </div>
       ) : (
         role === 'IMPOSTOR' ? (
-          <div className="flex flex-col items-center gap-3 animate-in slide-in-from-top duration-500">
-            <div className="flex items-center gap-2 md:gap-4 tracking-[0.2em] md:tracking-[0.4em] font-black text-[9px] md:text-[11px] w-max max-w-[80vw] md:max-w-none bg-whapigen-red/10 px-4 md:px-8 py-1 rounded-full border border-whapigen-red/20 whitespace-normal text-center">
+          <div className="flex flex-col items-center gap-1 animate-in slide-in-from-top duration-500">
+            <div className="flex items-center gap-2 md:gap-4 md:tracking-[0.1em] font-black text-xs md:text-lg w-max max-w-[80vw] md:max-w-none bg-whapigen-red/10 px-4 md:px-10 py-1 rounded-full border border-whapigen-red/20 whitespace-normal text-center">
               <EyeOff className="w-4 h-4 md:w-4 md:h-4 shrink-0 text-whapigen-red shadow-neon-red shadow-[0_0_15px_#ff3131]" />
               <span className="text-whapigen-red shadow-neon-red">YOU ARE THE IMPOSTOR</span>
             </div>
@@ -1933,7 +1940,7 @@ function PersistentWordBar({ role, secretWord, hintsEnabled, hints, phaseStarted
             {canReceiveIntel && hints && (
               <button
                 onClick={(e) => { e.stopPropagation(); setIntelRevealed(prev => !prev); }}
-                className={`flex items-center gap-2 tracking-[0.2em] text-[9px] font-bold px-6 py-2 rounded-full border transition-all cursor-pointer hover:scale-105 animate-in fade-in slide-in-from-bottom duration-700 ${intelRevealed
+                className={`flex items-center gap-2 tracking-[0.2em] text-xs md:text-lg font-bold px-2 py-2 rounded-full border transition-all cursor-pointer hover:scale-105 animate-in fade-in slide-in-from-bottom duration-700 ${intelRevealed
                   ? 'text-purple-300 bg-purple-600/30 border-purple-500/50 shadow-[0_0_20px_rgba(147,51,234,0.3)]'
                   : 'text-purple-400 bg-purple-600/20 hover:bg-purple-600/40 border-purple-500/30 hover:shadow-[0_0_20px_rgba(147,51,234,0.3)]'
                   }`}
@@ -1943,17 +1950,17 @@ function PersistentWordBar({ role, secretWord, hintsEnabled, hints, phaseStarted
               </button>
             )}
             {intelRevealed && hints && (
-              <div className="flex items-center gap-4 tracking-[0.2em] text-[9px] md:text-[11px] font-bold text-purple-400/90 bg-purple-600/10 px-6 py-1.5 rounded-full border border-purple-500/20 animate-in fade-in slide-in-from-bottom duration-700">
+              <div className="flex items-center gap-2 tracking-[0.2em] text-xs md:text-xs font-bold text-purple-400/90 bg-purple-600/10 px-2 py-1.5 rounded-full border border-purple-500/20 animate-in fade-in slide-in-from-bottom duration-700">
                 <span className="text-purple-500/50">HINT:</span>
                 <span>{hints[0]}</span>
               </div>
             )}
           </div>
         ) : (
-          <div className="flex items-center gap-2 md:gap-2 tracking-[0.2em] md:tracking-[0.2em] text-[9px] md:text-[11px] w-max max-w-[80vw] md:max-w-none bg-whapigen-cyan/10 px-4 py-1 rounded-full border border-whapigen-cyan/20 whitespace-normal text-center">
+          <div className="flex items-center gap-2 md:gap-2 tracking-[0.2em] md:tracking-[0.2em] text-lg md:text-lg w-max max-w-[80vw] md:max-w-none bg-whapigen-cyan/10 px-4 py-1 rounded-full border border-whapigen-cyan/20 whitespace-normal text-center">
             <Target className="w-4 h-4 text-whapigen-cyan shadow-neon-cyan" />
             <span className="text-white/70 text-sm">SECRET WORD:</span>
-            <span className="font-black text-white uppercase drop-shadow-neon-cyan tracking-[0.4em] break-words flex items-center justify-center min-w-0 text-center" style={{ fontSize: 'clamp(0.85rem, 3.5vw, 1.5rem)' }}>
+            <span className="font-black text-white uppercase drop-shadow-neon-cyan tracking-[0.2em] break-words flex items-center justify-center min-w-0 text-center" style={{ fontSize: 'clamp(0.85rem, 3.5vw, 1.5rem)' }}>
               {secretWord}
             </span>
           </div>
