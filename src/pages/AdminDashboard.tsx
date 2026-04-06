@@ -12,13 +12,13 @@ function GameSelect({ label, value, onChange, options }: { label: string, value:
   const [isOpen, setIsOpen] = useState(false);
   return (
     <div className="relative">
-      <label className="block text-[9px] font-jetbrains text-whapigen-cyan/50 mb-3 uppercase tracking-[0.4em] pl-2 font-black">
+      <label className="block text-[10px] font-jetbrains text-whapigen-cyan/50 mb-3 uppercase tracking-[0.4em] pl-2 font-black">
         {label}
       </label>
       <button
         onClick={() => setIsOpen(!isOpen)}
         onBlur={() => setTimeout(() => setIsOpen(false), 200)}
-        className="w-full glass-violet-select p-5 text-left flex justify-between items-center group hover:bg-purple-800/20"
+        className="w-full glass-violet-select p-2.5 text-left flex justify-between items-center group hover:bg-purple-800/20"
       >
         <span className="font-jetbrains text-sm font-bold text-purple-100">{options.find(o => o.value === value)?.label}</span>
         <ChevronDown className={`w-4 h-4 text-purple-400 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} />
@@ -163,7 +163,7 @@ export default function AdminDashboard() {
       <RainToggle />
 
 
-      <header className="flex justify-between items-center pb-8 border-b border-white/5 relative z-20 gap-2">
+      <header className="flex justify-between items-center pb-2 md:pb-8 border-b border-white/5 relative z-20 gap-2">
         <div className="flex items-center gap-3 md:gap-6">
           <div className="shrink-0">
             <GlitchLogo size="xs" isStatic={true} />
@@ -188,9 +188,9 @@ export default function AdminDashboard() {
         </button>
       </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8 relative z-10 flex-grow py-12 items-start">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 relative z-10 flex-grow py-4 items-start">
 
-        <div className="md:col-span-1 bg-white/5 backdrop-blur-xl border border-white/10 rounded-[40px] p-8 flex flex-col gap-6 h-fit max-h-[75vh] overflow-y-auto relative group shadow-2xl animate-in slide-in-from-left duration-700">
+        <div className="md:col-span-1 bg-white/5 backdrop-blur-xl border border-white/10 rounded-[40px] p-5 flex flex-col gap-6 h-fit max-h-[75vh] overflow-y-auto relative group shadow-2xl animate-in slide-in-from-left duration-700">
           <div className="absolute top-0 right-0 w-2 h-full bg-gradient-to-b from-whapigen-cyan to-purple-600 blur-sm transition-all duration-500 opacity-50 group-hover:opacity-100"></div>
           <h2 className="text-xs font-black font-sora text-white tracking-[0.3em] flex items-center gap-4 uppercase">
             <div className="p-3 bg-gradient-to-br from-whapigen-cyan/20 to-purple-600/20 rounded-2xl border border-white/5">
@@ -199,7 +199,7 @@ export default function AdminDashboard() {
             SETUP PROTOCOL
           </h2>
 
-          <div className="space-y-6">
+          <div className="space-y-2">
             <GameSelect
               label="Turn Duration"
               value={turnDuration}
@@ -237,13 +237,13 @@ export default function AdminDashboard() {
 
 
             <div>
-              <label className="block text-[9px] font-jetbrains text-whapigen-cyan/50 mb-3 uppercase tracking-[0.4em] pl-2 font-black">
+              <label className="block text-[10px] font-jetbrains text-whapigen-cyan/50 mb-2 uppercase tracking-[0.4em] pl-2 font-black">
                 Hints
               </label>
               <button
                 type="button"
                 onClick={() => setHintsEnabled(!hintsEnabled)}
-                className={`w-full flex items-center justify-between p-5 rounded-[30px] backdrop-blur-xl border transition-all cursor-pointer ${hintsEnabled
+                className={`w-full flex items-center justify-between p-2.5 rounded-[30px] backdrop-blur-xl border transition-all cursor-pointer ${hintsEnabled
                   ? 'bg-purple-600/20 border-purple-500/40 shadow-[0_0_20px_rgba(147,51,234,0.2)]'
                   : 'bg-black/60 border-white/5 hover:bg-black/40'
                   }`}
@@ -257,7 +257,7 @@ export default function AdminDashboard() {
           </div>
 
           <button
-            className="w-full bg-gradient-to-r from-whapigen-cyan to-purple-600 hover:from-white hover:to-white text-black font-sora tracking-[0.3em] font-black h-16 flex items-center justify-center transition-all rounded-full group/btn mt-6 disabled:opacity-50 disabled:cursor-not-allowed uppercase shadow-[0_10px_40px_rgba(0,240,255,0.2)] hover:shadow-neon-cyan/50 hover:-translate-y-1 active:translate-y-0"
+            className="w-full bg-gradient-to-r from-whapigen-cyan to-purple-600 hover:from-white hover:to-white text-black font-sora tracking-[0.3em] font-black h-16 flex items-center justify-center transition-all rounded-full group/btn mt-0 md:mt-6 disabled:opacity-50 disabled:cursor-not-allowed uppercase shadow-[0_10px_40px_rgba(0,240,255,0.2)] hover:shadow-neon-cyan/50 hover:-translate-y-1 active:translate-y-0"
             onClick={createRoom}
             disabled={isCreating}
           >
@@ -271,7 +271,7 @@ export default function AdminDashboard() {
 
         <div className="md:col-span-2 bg-black/40 backdrop-blur-xl border border-white/5 rounded-[40px] p-4 md:p-12 flex flex-col gap-10 shadow-2xl relative overflow-x-hidden group/missions animate-in slide-in-from-right duration-700">
           <div className="absolute top-0 left-0 w-2 h-full bg-gradient-to-b from-purple-600 to-whapigen-cyan blur-sm opacity-30 group-hover/missions:opacity-70 transition-opacity"></div>
-          <h2 className="text-xs font-black font-jetbrains text-white flex items-center gap-4 tracking-[0.4em] uppercase mb-2">
+          <h2 className="text-xs font-black font-jetbrains text-white flex items-center gap-2 md:gap-4 tracking-[0.4em] uppercase mb-0 md:mb-2">
             <Users className="w-5 h-5 text-purple-500" /> Active Missions
             <div className="flex items-center gap-2 px-3 py-1 bg-whapigen-cyan/10 rounded-full border border-whapigen-cyan/20">
               <div className="w-2 h-2 bg-whapigen-cyan rounded-full animate-pulse shadow-[0_0_8px_#00f0ff]"></div>
@@ -291,7 +291,7 @@ export default function AdminDashboard() {
           ) : (
             <div className="grid gap-6 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
               {rooms.map((room) => (
-                <div key={room.id} className="flex flex-col md:flex-row md:justify-between items-start md:items-center gap-6 md:gap-0 p-4 md:p-8 w-full bg-white/5 border border-white/5 hover:border-purple-500/30 hover:shadow-[0_0_40px_rgba(147,51,234,0.1)] transition-all group/item rounded-[30px] backdrop-blur-2xl relative overflow-x-hidden">
+                <div key={room.id} className="flex flex-col md:flex-row md:justify-between items-start md:items-center gap-4 md:gap-0 p-3 md:p-8 w-full bg-white/5 border border-white/5 hover:border-purple-500/30 hover:shadow-[0_0_40px_rgba(147,51,234,0.1)] transition-all group/item rounded-[30px] backdrop-blur-2xl relative overflow-x-hidden">
                   <div className="absolute inset-0 bg-gradient-to-r from-whapigen-cyan/5 to-purple-600/5 opacity-0 group-hover/item:opacity-100 transition-opacity"></div>
                   <div className="relative z-10">
                     <div className="flex items-center justify-center md:justify-start gap-10 md:gap-6 w-full">
