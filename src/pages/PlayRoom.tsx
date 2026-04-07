@@ -268,81 +268,76 @@ export default function PlayRoom() {
   useEffect(() => {
     if (!gameState || !room) return;
 
-    // AGREGAMOS 'ROLE_REVEAL' AL CANDADO:
-    // No queremos que el sistema de aborto automático actúe mientras se revelan roles
     if (gameState.phase === 'LOBBY' || gameState.phase === 'RESULTS' || gameState.phase === 'ROLE_REVEAL') {
       isAbortingRef.current = false;
       return;
     }
 
+    // 1. CONDICIÓN SUPREMA: Faltan jugadores físicos (Alguien cerró la pestaña o fue Kickeado)
+    if (activePlayers.length < 3) {
+      if (!isAbortingRef.current) {
+        isAbortingRef.current = true;
+        if (isTeacher) {
+          console.warn('📝 DB WRITE - LOBBY (Abortando: Quórum físico perdido, menos de 3 en la sala)');
+          sessionStorage.setItem('lobby_error', 'MISSION ABORTED: INSUFFICIENT PLAYERS CONNECTED');
+
+          supabase.from('game_state').update({
+            phase: 'LOBBY',
+            current_turn_index: 0,
+            current_turn_player_id: null,
+            turn_started_at: null,
+            is_paused: false,
+            secret_word: null
+          }).eq('room_id', room.id).then();
+
+          activePlayers.forEach(p =>
+            supabase.from('players').update({ is_eliminated: false, turn_order: null }).eq('id', p.id).then()
+          );
+        }
+      }
+      return; // Detiene la ejecución. Nunca evalúa si alguien ganó.
+    }
+
+    // 2. EL IMPOSTOR SE FUE O FUE KICKEADO
+    const totalImpostorsInRoom = activePlayers.filter(p => p.role === 'IMPOSTOR').length;
+    if (totalImpostorsInRoom === 0) {
+      if (!isAbortingRef.current) {
+        isAbortingRef.current = true;
+        if (isTeacher) {
+          console.warn('📝 DB WRITE - LOBBY (Impostor abandonó/fue expulsado)');
+          sessionStorage.setItem('lobby_error', 'MISSION ABORTED: NO LIVING IMPOSTORS');
+
+          supabase.from('game_state').update({
+            phase: 'LOBBY',
+            current_turn_index: 0,
+            current_turn_player_id: null,
+            turn_started_at: null,
+            is_paused: false,
+            secret_word: null
+          }).eq('room_id', room.id).then();
+
+          activePlayers.forEach(p =>
+            supabase.from('players').update({ is_eliminated: false, turn_order: null }).eq('id', p.id).then()
+          );
+        }
+      }
+      return;
+    }
+
+    // 3. EVALUACIÓN NORMAL DE VICTORIA GLOBALES (Si están todos conectados)
     const alivePlayersList = activePlayers.filter(p => !p.is_eliminated);
     const aliveCount = alivePlayersList.length;
     if (aliveCount === 0) return;
 
+    const impostorsAlive = alivePlayersList.filter(p => p.role === 'IMPOSTOR').length;
+    const nativesAlive = aliveCount - impostorsAlive;
+
     if (!isAbortingRef.current) {
-      // 0. NUEVA CONDICIÓN: Verificar si los impostores salieron de la sala (Expulsión/Desconexión)
-      const totalImpostorsInRoom = activePlayers.filter(p => p.role === 'IMPOSTOR').length;
-
-      if (totalImpostorsInRoom === 0) {
-        isAbortingRef.current = true;
-        if (isTeacher) {
-          console.warn('📝 DB WRITE - Cambiando game_state a LOBBY (Impostor abandonó/fue expulsado)');
-          sessionStorage.setItem('lobby_error', 'MISSION ABORTED: NO LIVING IMPOSTORS');
-
-          // AGREGAMOS EL .then() PARA EJECUTAR LA QUERY
-          supabase.from('game_state').update({
-            phase: 'LOBBY',
-            current_turn_index: 0,
-            current_turn_player_id: null,
-            turn_started_at: null,
-            is_paused: false,
-            secret_word: null
-          }).eq('room_id', room.id).then();
-
-          activePlayers.forEach(p =>
-            // AGREGAMOS EL .then() PARA EJECUTAR LA QUERY
-            supabase.from('players').update({ is_eliminated: false, turn_order: null }).eq('id', p.id).then()
-          );
-        }
-        return;
-      }
-
-      // Si pasamos el filtro anterior, significa que los impostores siguen en la sala (vivos o muertos)
-      const impostorsAlive = alivePlayersList.filter(p => p.role === 'IMPOSTOR').length;
-      const nativesAlive = aliveCount - impostorsAlive;
-
-      // 1. Check Win Conditions first to avoid aborting a legitimate win
       if (impostorsAlive === 0 || nativesAlive <= impostorsAlive) {
         isAbortingRef.current = true;
         if (isTeacher) {
-          console.warn('📝 DB WRITE - Cambiando game_state a RESULTS (Victoria detectada globalmente)');
-          // AGREGAMOS EL .then() PARA EJECUTAR LA QUERY
+          console.warn('📝 DB WRITE - RESULTS (Victoria detectada globalmente)');
           supabase.from('game_state').update({ phase: 'RESULTS' }).eq('room_id', room.id).then();
-        }
-        return;
-      }
-
-      // 2. Abort to LOBBY rule: if alive players drop < 3 and NO ONE WON, abort.
-      if (aliveCount < 3) {
-        isAbortingRef.current = true;
-        if (isTeacher) {
-          console.warn('📝 DB WRITE - Cambiando game_state a LOBBY (Abortando por falta de jugadores vivos)');
-          sessionStorage.setItem('lobby_error', 'MISSION ABORTED: INSUFFICIENT PLAYERS ALIVE');
-
-          // AGREGAMOS EL .then() PARA EJECUTAR LA QUERY
-          supabase.from('game_state').update({
-            phase: 'LOBBY',
-            current_turn_index: 0,
-            current_turn_player_id: null,
-            turn_started_at: null,
-            is_paused: false,
-            secret_word: null
-          }).eq('room_id', room.id).then();
-
-          activePlayers.forEach(p =>
-            // AGREGAMOS EL .then() PARA EJECUTAR LA QUERY
-            supabase.from('players').update({ is_eliminated: false, turn_order: null }).eq('id', p.id).then()
-          );
         }
       }
     }
@@ -954,12 +949,14 @@ function PhaseLobby({ isTeacher, roomId, players, roomLevel }: { isTeacher: bool
 // ---------------- ROLE REVEAL PHASE ----------------
 function PhaseReveal({ isTeacher, roomId, players }: { isTeacher: boolean, roomId: string, players: any[] }) {
   const [revealed, setRevealed] = useState(false);
-  const { gameState } = useGame();
+  const { gameState, room } = useGame();
   const { studentData } = useAuth();
 
   const currentPlayer = players.find(p => p.id === studentData?.playerId);
   const role = currentPlayer?.role;
   const secretWord = gameState?.secret_word;
+  const hintsEnabled = !!room?.hints_enabled;
+  const hints = hintsEnabled && secretWord ? getHintsForWord(secretWord, room.level) : null;
 
   const beginSpeaking = async () => {
     try {
@@ -1072,6 +1069,20 @@ function PhaseReveal({ isTeacher, roomId, players }: { isTeacher: boolean, roomI
                 </h1>
               </div>
             </div>
+
+            {role === 'IMPOSTOR' && hints && (
+              <>
+                <div className="w-full h-px bg-gradient-to-r from-transparent via-white/10 to-transparent my-4"></div>
+                <div className="flex flex-col items-center gap-2 w-full">
+                  <span className="text-purple-400 font-jetbrains text-sm tracking-[0.8em] font-black uppercase mb-4 ml-[0.8em]">HINT</span>
+                  <div className="flex items-center justify-center w-full min-w-0">
+                    <h1 className="text-white font-sora font-black uppercase tracking-tighter leading-none text-center drop-shadow-neon-violet break-words overflow-visible text-[clamp(1.2rem,8vw,2.5rem)] md:text-[clamp(1.5rem,5vw,2.5rem)]">
+                      {hints[0]}
+                    </h1>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -1354,6 +1365,9 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
   const circleRef = useRef(null);
   const tlRef = useRef<gsap.core.Tween | null>(null);
 
+  // ── NUEVO: CANDADO ANTI-DOBLE EJECUCIÓN ──
+  const isProcessingRef = useRef(false);
+
   // Jump-free Absolute Timer
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_, setTick] = useState(0);
@@ -1365,13 +1379,9 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
     const fetchVotes = async () => {
       const { data, error } = await supabase.from('votes').select('*').eq('room_id', roomId);
       if (error) console.error('❌ FETCH VOTES ERROR:', error);
-      else {
-        console.log('📥 FETCH VOTES DB (Current Length):', data?.length);
-        setVotes(data || []);
-      }
+      else setVotes(data || []);
     };
 
-    // Initial fetch with small delay to let DB settle after round transition
     const timer = setTimeout(fetchVotes, 300);
 
     let isSubscribed = false;
@@ -1380,15 +1390,11 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
         fetchVotes();
       });
 
-    channel.subscribe((status, err) => {
-      console.log('🔌 CANAL VOTES STATUS:', status, err || '');
+    channel.subscribe((status) => {
       if (status === 'SUBSCRIBED') isSubscribed = true;
     });
 
-    // Polling fallback mechanism
-    const fetchVotesFallback = setInterval(() => {
-      fetchVotes();
-    }, 2500);
+    const fetchVotesFallback = setInterval(fetchVotes, 2500);
 
     return () => {
       clearTimeout(timer);
@@ -1412,52 +1418,40 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
   const displayTime = gameState.is_paused ? pausedTimeRef.current : actualTimeLeft;
 
   useEffect(() => {
-    if (gameState.is_paused) return; // freeze visual tick
+    if (gameState.is_paused) return;
     const interval = setInterval(() => setTick(t => t + 1), 500);
     return () => clearInterval(interval);
   }, [gameState.is_paused]);
 
-  // ── SMART VOTING LISTENER: fires calculateResults when all votes are cast
-  // Dedicated useEffect so it's never blocked by the timer or is_paused state.
   useEffect(() => {
     if (isTeacher && votes.length > 0 && votes.length === alivePlayers.length) {
-      console.log('[VOTING] All votes in — triggering calculateResults()');
       calculateResults();
     }
   }, [votes, alivePlayers, isTeacher]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Timer expiry fallback (in case someone never votes)
   useEffect(() => {
     if (actualTimeLeft <= 0 && isTeacher && !gameState.is_paused) {
-      console.log('[VOTING] Timer expired — triggering calculateResults()');
       calculateResults();
     }
   }, [actualTimeLeft, isTeacher, gameState.is_paused]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // GSAP logic
   useEffect(() => {
     if (!gameState.turn_started_at) return;
-
     tlRef.current = gsap.to(circleRef.current, {
       strokeDashoffset: 0,
       duration: room.voting_duration,
       ease: 'none',
       paused: gameState.is_paused
     });
-
-    return () => {
-      if (tlRef.current) tlRef.current.kill();
-    };
+    return () => { if (tlRef.current) tlRef.current.kill(); };
   }, [gameState.turn_started_at]);
 
-  // Handle Pause/Resume Sync — kill stale GSAP tween to prevent ghost timer
   useEffect(() => {
     if (!tlRef.current) return;
     if (gameState.is_paused) {
       tlRef.current.pause();
     } else {
       tlRef.current.kill();
-      // Rebuild tween from current remaining time so the visual threshold (5s red) is accurate
       const startedAt = new Date(gameState.turn_started_at || Date.now()).getTime();
       const nowWithOffset = Date.now() + (serverTimeOffset || 0);
       const elapsedS = (nowWithOffset - startedAt) / 1000;
@@ -1486,68 +1480,55 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
   const hasVoted = votes.some(v => v.voter_id === studentData?.playerId);
 
   const handleVote = async (targetId: string) => {
-    console.log('⚙️ FUNCIÓN EJECUTADA para:', targetId);
-    if (isSpectator) {
-      console.warn('⛔ VOTO BLOQUEADO: El usuario es espectador.');
-      return;
-    }
-    if (!studentData?.playerId) {
-      console.warn('Bloqueado por validación: studentData.playerId es undefined');
-      return;
-    }
+    if (isSpectator || !studentData?.playerId) return;
     const { error } = await supabase.from('votes').upsert(
       { room_id: roomId, voter_id: studentData.playerId, target_id: targetId },
       { onConflict: 'room_id,voter_id' }
     );
     if (error) console.error('❌ ERROR al insertar voto:', error.message);
-    else console.log('✅ VOTO REGISTRADO para:', targetId);
   };
 
   const calculateResults = async () => {
-    const hasImpostors = players.some((p: any) => p.role === 'IMPOSTOR' && !p.is_host);
+    if (isProcessingRef.current) return; // <-- BLOQUEA DOBLE EJECUCIÓN
 
-    // CANDADO ABSOLUTO
-    if (gameState.phase === 'LOBBY' || players.filter((p: any) => !p.is_host).length < 3 || !hasImpostors) {
-      console.warn('⛔ calculateResults BLOQUEADO: Faltan jugadores o el Impostor abandonó la sala.');
-      return; // <--- VITAL
+    const hasImpostors = players.some((p: any) => p.role === 'IMPOSTOR' && !p.is_host);
+    const validPhysicalPlayers = players.filter((p: any) => !p.is_host);
+
+    // ── PROTECCIÓN CONTRA EL "LEAVE MISSION" EN PLENA VOTACIÓN ──
+    if (gameState.phase === 'LOBBY' || validPhysicalPlayers.length < 3 || !hasImpostors) {
+      console.warn('⛔ calculateResults BLOQUEADO: Aborto físico a LOBBY.');
+      if (isTeacher) {
+        isProcessingRef.current = true;
+        await supabase.from('votes').delete().eq('room_id', roomId);
+        await supabase.from('game_state').update({ phase: 'LOBBY', current_turn_index: 0, is_paused: false, last_eliminated_info: null }).eq('room_id', roomId);
+        const resetPromises = players.map(p => supabase.from('players').update({ is_eliminated: false, turn_order: null }).eq('id', p.id));
+        await Promise.all(resetPromises);
+      }
+      return;
     }
 
-    // Traemos los votos frescos de la DB
+    isProcessingRef.current = true; // <-- CIERRA EL CANDADO
+
     const { data: liveVotes } = await supabase.from('votes').select('*').eq('room_id', roomId);
 
-    // --- CANDADO 2: Si nadie votó, nadie muere ---
-    // Eliminamos el "randomTarget" porque queremos justicia por votos.
     if (!liveVotes || liveVotes.length === 0) {
-      console.log('🗳️ SIN VOTOS: Empate técnico por silencio.');
       await processRoundEnd(null);
       return;
     }
 
-    // 1. Conteo de votos
     const targetCounts: Record<string, number> = {};
     liveVotes.forEach(v => {
       targetCounts[v.target_id] = (targetCounts[v.target_id] || 0) + 1;
     });
 
-    // 2. Encontrar el máximo y ver cuántos lo comparten
     const maxVotes = Math.max(...Object.values(targetCounts), 0);
     const topCandidates = Object.keys(targetCounts).filter(id => targetCounts[id] === maxVotes);
-
-    // --- CANDADO 3: Regla de Mayoría y Empate ---
-    // Solo hay eliminado si hay EXACTAMENTE un candidato con el máximo de votos.
-    // Si topCandidates.length > 1, significa que hay empate (ej: 2 votos para A, 2 para B).
     const eliminatedId = topCandidates.length === 1 ? topCandidates[0] : null;
-
-    if (!eliminatedId && maxVotes > 0) {
-      console.log('⚖️ EMPATE DETECTADO: Varios jugadores tienen', maxVotes, 'votos. Nadie sale.');
-    }
 
     await processRoundEnd(eliminatedId);
   };
 
-  // Separated: the actual elimination + round transition logic
   const processRoundEnd = async (eliminatedId: string | null) => {
-    // Variable para guardar el nombre y si era impostor
     let lastEliminatedInfo = null;
 
     if (eliminatedId) {
@@ -1567,7 +1548,6 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
         const updates = winners.map((p: any) => supabase.from('players').update({ score: (p.score || 0) + 10 }).eq('id', p.id));
         await Promise.all(updates);
       } else if (eliminatedPlayer) {
-        // Native killed -> Impostor +2 pts
         const impostor = players.find((p: any) => p.role === 'IMPOSTOR');
         if (impostor) {
           await supabase.from('players').update({ score: (impostor.score || 0) + 2 }).eq('id', impostor.id);
@@ -1575,15 +1555,11 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
       }
     }
 
-    // TAREA 2: Lógica de Victoria
     const newAlive = eliminatedId ? alivePlayers.filter((p: any) => p.id !== eliminatedId) : alivePlayers;
     const impostorsAlive = newAlive.filter((p: any) => p.role === 'IMPOSTOR').length;
     const nativesAlive = newAlive.length - impostorsAlive;
 
-    // Actualizamos el estado del juego con la info del último eliminado
-    const updatePayload: any = {
-      last_eliminated_info: lastEliminatedInfo // <-- AGREGAMOS ESTA NUEVA COLUMNA O CAMPO JSON
-    };
+    const updatePayload: any = { last_eliminated_info: lastEliminatedInfo };
 
     if (impostorsAlive === 0) {
       updatePayload.phase = 'RESULTS';
@@ -1840,23 +1816,31 @@ function PhaseResults({ isTeacher, roomId, players }: { isTeacher: boolean, room
 
 // ---------------- ROUND STANDBY PHASE ----------------
 function PhaseStandby({ isTeacher, roomId, players, gameState }: { isTeacher: boolean, roomId: string, players: any[], gameState: any }) {
+  // ── NUEVO: CANDADO ANTI-DOBLE CLIC PARA AVANCE DE RONDA ──
+  const isStartingRef = useRef(false);
+
   const startNextRound = async () => {
+    if (isStartingRef.current) return; // Bloqueado si ya se presionó
+    isStartingRef.current = true;
+
     const alivePlayers = players
       .filter(p => !p.is_eliminated && !p.is_host)
       .sort((a, b) => (a.turn_order || 0) - (b.turn_order || 0));
 
-    if (alivePlayers.length === 0) return;
+    if (alivePlayers.length === 0) {
+      isStartingRef.current = false;
+      return;
+    }
 
     const firstPlayer = alivePlayers[0];
 
-    console.warn('📝 DB WRITE - Cambiando game_state:', { nuevaFase: 'SPEAKING_TURNS', disparadoPor: 'PhaseStandby (Siguiente Ronda)' });
+    console.warn('📝 DB WRITE - Cambiando game_state a SPEAKING_TURNS');
     await supabase.from('game_state').update({
       phase: 'SPEAKING_TURNS',
       current_round: gameState.current_round + 1,
       current_turn_index: firstPlayer.turn_order || 0,
       current_turn_player_id: firstPlayer.id,
-      turn_started_at: new Date().toISOString(),
-      last_eliminated_info: null // <--- LIMPIEZA DE MEMORIA PARA LA NUEVA RONDA
+      turn_started_at: new Date().toISOString()
     }).eq('room_id', roomId);
   };
 
@@ -1897,26 +1881,15 @@ function PersistentWordBar({ role, secretWord, hintsEnabled, hints, phaseStarted
   const [canReceiveIntel, setCanReceiveIntel] = useState(false);
   const [intelRevealed, setIntelRevealed] = useState(false);
 
-  // ── IMPOSTOR HINT TIMER: unlock "RECEIVE INTEL" button after 10 seconds ──
+  // ── IMPOSTOR HINT: Immediate access, no timer ──
   useEffect(() => {
-    if (role !== 'IMPOSTOR' || !hintsEnabled || !hints || !phaseStartedAt) {
+    if (role !== 'IMPOSTOR' || !hintsEnabled || !hints) {
       setCanReceiveIntel(false);
       setIntelRevealed(false);
       return;
     }
-
-    const startedAt = new Date(phaseStartedAt).getTime();
-    const elapsed = Date.now() - startedAt;
-    const remainingMs = Math.max(0, 10_000 - elapsed);
-
-    if (elapsed >= 10_000) {
-      setCanReceiveIntel(true);
-      return;
-    }
-
-    const timer = setTimeout(() => setCanReceiveIntel(true), remainingMs);
-    return () => clearTimeout(timer);
-  }, [role, hintsEnabled, hints, phaseStartedAt]);
+    setCanReceiveIntel(true);
+  }, [role, hintsEnabled, hints]);
 
   return (
     <div
@@ -1957,7 +1930,7 @@ function PersistentWordBar({ role, secretWord, hintsEnabled, hints, phaseStarted
             )}
           </div>
         ) : (
-          <div className="flex items-center gap-2 md:gap-2 tracking-[0.2em] md:tracking-[0.2em] text-lg md:text-lg w-max max-w-[80vw] md:max-w-none bg-whapigen-cyan/10 px-4 py-1 rounded-full border border-whapigen-cyan/20 whitespace-normal text-center">
+          <div className="flex items-center gap-1 md:gap-2 tracking-[0.1em] md:tracking-[0.2em] text-lg md:text-lg w-max max-w-[80vw] md:max-w-none bg-whapigen-cyan/10 px-4 py-1 rounded-full border border-whapigen-cyan/20 whitespace-normal text-center">
             <Target className="w-4 h-4 text-whapigen-cyan shadow-neon-cyan" />
             <span className="text-white/70 text-sm">SECRET WORD:</span>
             <span className="font-black text-white uppercase drop-shadow-neon-cyan tracking-[0.2em] break-words flex items-center justify-center min-w-0 text-center" style={{ fontSize: 'clamp(0.85rem, 3.5vw, 1.5rem)' }}>

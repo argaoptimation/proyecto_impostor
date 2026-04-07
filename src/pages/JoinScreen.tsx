@@ -49,24 +49,17 @@ export default function JoinScreen() {
       if (countError) throw countError;
       if (count !== null && count >= 16) throw new Error('LA SALA ESTÁ LLENA (16/16)');
 
-      // 3. Validar Nickname (Candado anti-clones y LIMPIEZA DE FANTASMAS)
+      // 3. CANDADO ANTI-CLONES (Estricto, sin borrar a nadie)
       const { data: existingPlayer } = await supabase
         .from('players')
-        .select('id, created_at')
+        .select('id')
         .eq('room_id', roomData.id)
         .eq('nickname', cleanNickname)
         .maybeSingle();
 
       if (existingPlayer) {
-        const createdAt = new Date(existingPlayer.created_at).getTime();
-        const ageSeconds = (Date.now() - createdAt) / 1000;
-
-        if (ageSeconds < 30) {
-          // ACÁ PONEMOS EL MENSAJE LLAMATIVO 1
-          throw new Error('⚠️ DUPLICATE IDENTITY: PLAYER ALREADY IN THE ROOM');
-        } else {
-          await supabase.from('players').delete().eq('id', existingPlayer.id);
-        }
+        // Si el nombre ya existe, bloqueamos la entrada directamente.
+        throw new Error('⚠️ DUPLICATE IDENTITY: PLAYER ALREADY IN THE ROOM');
       }
 
       // 4. Insertar Jugador
