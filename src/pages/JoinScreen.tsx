@@ -39,6 +39,15 @@ export default function JoinScreen() {
         throw new Error('CÓDIGO DE SALA INVÁLIDO');
       }
 
+      // 1.5. Consultamos el estado de la partida para saber si ya empezó
+      const { data: stateData } = await supabase
+        .from('game_state')
+        .select('phase')
+        .eq('room_id', roomData.id)
+        .single();
+
+      const isGameInProgress = stateData?.phase !== 'LOBBY';
+
       // 2. RESTRICCIÓN: Límite de 16 jugadores
       const { count, error: countError } = await supabase
         .from('players')
@@ -49,7 +58,7 @@ export default function JoinScreen() {
       if (countError) throw countError;
       if (count !== null && count >= 16) throw new Error('LA SALA ESTÁ LLENA (16/16)');
 
-      // 3. CANDADO ANTI-CLONES (Estricto, sin borrar a nadie)
+      // 3. CANDADO ANTI-CLONES
       const { data: existingPlayer } = await supabase
         .from('players')
         .select('id')
@@ -58,15 +67,20 @@ export default function JoinScreen() {
         .maybeSingle();
 
       if (existingPlayer) {
-        // Si el nombre ya existe, bloqueamos la entrada directamente.
         throw new Error('⚠️ DUPLICATE IDENTITY: PLAYER ALREADY IN THE ROOM');
       }
 
-      // 4. Insertar Jugador
+      console.log("🔍 DATOS ANTES DE INSERTAR JUGADOR:", {
+        faseLeida: stateData?.phase,
+        juegoEnCurso: isGameInProgress
+      });
+
+      // 4. Insertar Jugador (Asignando modo espectador si el juego ya empezó)
       const { error: joinError } = await supabase.from('players').insert({
         room_id: roomData.id,
         nickname: cleanNickname,
-        is_host: false
+        is_host: false,
+        is_spectator: isGameInProgress // <-- ACÁ APLICAMOS EL MODO
       });
 
       if (joinError) {

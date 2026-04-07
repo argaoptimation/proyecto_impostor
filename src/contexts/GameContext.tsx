@@ -220,7 +220,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
           const { data } = await supabase.from('players').select('*').eq('room_id', roomId);
           if (data) setPlayers(data);
         })
-        .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'players', filter: `room_id=eq.${roomId}` }, async (payload) => {
+        .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'players' }, async (payload) => {
           const sd = studentDataRef.current;
           const deletedId = (payload.old as any)?.id;
 

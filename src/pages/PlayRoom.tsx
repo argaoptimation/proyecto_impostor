@@ -502,7 +502,6 @@ export default function PlayRoom() {
           secretWord={gameState.secret_word}
           hintsEnabled={!!room.hints_enabled}
           hints={getHintsForWord(gameState.secret_word || '', room.level)}
-          phaseStartedAt={gameState.turn_started_at}
         />
       )}
 
@@ -1110,14 +1109,19 @@ function PhaseSpeaking({ isTeacher, room, gameState, players }: { isTeacher: boo
   const pausedTimeRef = useRef(room.turn_duration);
 
   // Derive absolute time
-  let rawTimeLeftMs = room.turn_duration * 1000;
+  // ── FIX NaN: Aseguramos que haya un número válido siempre ──
+  const safeTurnDuration = room?.turn_duration || 30;
+  let rawTimeLeftMs = safeTurnDuration * 1000;
+
   if (gameState.turn_started_at) {
     const startedAt = new Date(gameState.turn_started_at).getTime();
-    const nowWithOffset = Date.now() + (serverTimeOffset || 0);
-    const elapsedMs = nowWithOffset - startedAt;
-    rawTimeLeftMs = (room.turn_duration * 1000) - elapsedMs;
+    if (!isNaN(startedAt)) {
+      const nowWithOffset = Date.now() + (serverTimeOffset || 0);
+      const elapsedMs = nowWithOffset - startedAt;
+      rawTimeLeftMs = (safeTurnDuration * 1000) - elapsedMs;
+    }
   }
-  let actualTimeLeft = Math.max(0, Math.floor(rawTimeLeftMs / 1000));
+  let actualTimeLeft = Math.max(0, Math.floor((rawTimeLeftMs || 0) / 1000));
 
   if (!gameState.is_paused) {
     pausedTimeRef.current = actualTimeLeft;
@@ -1195,6 +1199,18 @@ function PhaseSpeaking({ isTeacher, room, gameState, players }: { isTeacher: boo
     return () => { if (tlRef.current) tlRef.current.kill(); };
   }, [gameState.is_paused]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── EFECTO CORREGIDO: SALTAR TURNO SI EL JUGADOR ABANDONA ──
+  useEffect(() => {
+    // Buscamos al jugador directamente adentro del efecto
+    const activePlayer = players.find((p: any) => p.id === gameState.current_turn_player_id);
+
+    // Si somos el admin, hay un turno activo, pero el jugador ya no existe en el array
+    if (isTeacher && gameState.current_turn_player_id && !activePlayer) {
+      console.warn('🚨 JUGADOR DESCONECTADO EN SU TURNO. Saltando turno...');
+      handleNextTurn();
+    }
+  }, [players, isTeacher, gameState.current_turn_player_id]); // <-- Depender de 'players' obliga al efecto a ejecutarse al borrar a alguien
+
   const handleNextTurn = async () => {
     const hasImpostors = players.some((p: any) => p.role === 'IMPOSTOR' && !p.is_host);
     const validPlayersCount = players.filter((p: any) => !p.is_host && !p.is_eliminated).length;
@@ -1245,16 +1261,16 @@ function PhaseSpeaking({ isTeacher, room, gameState, players }: { isTeacher: boo
     <div className="flex flex-col items-center justify-center gap-2 w-full md:pt-48 animate-in zoom-in-95 duration-500 min-h-[50vh]">
       <div className="text-center space-y-2 px-4">
         <h3 className="text-whapigen-cyan font-jetbrains tracking-[0.2em] pt-4 text-xs md:text-sm uppercase">
-          {currentPlayer?.id === studentData?.playerId ? (
+          {currentPlayer && studentData?.playerId && currentPlayer.id === studentData.playerId ? (
             <span key="your-turn" className="animate-pulse shadow-neon-pulse-cyan px-4 py-1 rounded-full border border-whapigen-cyan/30">YOUR TURN TO OPERATE</span>
           ) : (
             <span key="waiting-for" className="text-white/70">{`WAITING FOR ${currentPlayer?.nickname || '...'}`}</span>
           )}
         </h3>
-        <h2 className={`text-3xl md:text-6xl font-sora font-bold text-white uppercase transition-all duration-500 flex items-center justify-center gap-2 ${currentPlayer?.id === studentData?.playerId ? 'border-neon-active p-8 rounded-[40px] bg-whapigen-cyan/5 scale-95' : 'drop-shadow-neon-cyan opacity-80'}`}>
-          {currentPlayer?.id === studentData?.playerId ? <span key="arrow-left" className="arrow-indicator">{">>"}</span> : null}
-          <span key="player-name">{currentPlayer?.nickname || 'UNKNOWN'}</span>
-          {currentPlayer?.id === studentData?.playerId ? <span key="arrow-right" className="arrow-indicator">{"<<"}</span> : null}
+        <h2 className={`text-3xl md:text-6xl font-sora font-bold text-white uppercase flex items-center justify-center gap-2 ${currentPlayer && studentData?.playerId && currentPlayer.id === studentData.playerId ? 'border-neon-active p-8 rounded-[40px] bg-whapigen-cyan/5' : 'border-4 border-transparent p-8 drop-shadow-neon-cyan opacity-80'}`}>
+          <span key="arrow-left" className={`arrow-indicator ${currentPlayer && studentData?.playerId && currentPlayer.id === studentData.playerId ? 'opacity-100' : 'opacity-0 invisible'}`}>{">>"}</span>
+          <span key="player-name">{currentPlayer?.nickname || '...'}</span>
+          <span key="arrow-right" className={`arrow-indicator ${currentPlayer && studentData?.playerId && currentPlayer.id === studentData.playerId ? 'opacity-100' : 'opacity-0 invisible'}`}>{"<<"}</span>
         </h2>
       </div>
 
@@ -1358,9 +1374,16 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
   const { studentData } = useAuth();
   const { refreshPlayers, serverTimeOffset } = useGame();
   const [votes, setVotes] = useState<any[]>([]);
-  const alivePlayers = players.filter((p: any) => !p.is_eliminated && !p.is_host);
+  const alivePlayers = players.filter((p: any) => !p.is_eliminated && !p.is_host && !p.is_spectator);
   const currentUser = players.find((p: any) => p.id === studentData?.playerId);
-  const isSpectator = currentUser?.is_eliminated;
+  const isSpectator = currentUser?.is_eliminated || currentUser?.is_spectator;
+
+  console.log("🔍 REVISANDO ESTADO DEL JUGADOR:", {
+    nombre: currentUser?.nickname,
+    estaEliminado: currentUser?.is_eliminated,
+    esEspectador: currentUser?.is_spectator,
+    bloqueoActivado: isSpectator
+  });
 
   const circleRef = useRef(null);
   const tlRef = useRef<gsap.core.Tween | null>(null);
@@ -1489,29 +1512,51 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
   };
 
   const calculateResults = async () => {
-    if (isProcessingRef.current) return; // <-- BLOQUEA DOBLE EJECUCIÓN
+    if (isProcessingRef.current) return;
 
-    const hasImpostors = players.some((p: any) => p.role === 'IMPOSTOR' && !p.is_host);
-    const validPhysicalPlayers = players.filter((p: any) => !p.is_host);
+    // ── CERRAMOS EL CANDADO TEMPRANO ──
+    isProcessingRef.current = true;
 
-    // ── PROTECCIÓN CONTRA EL "LEAVE MISSION" EN PLENA VOTACIÓN ──
-    if (gameState.phase === 'LOBBY' || validPhysicalPlayers.length < 3 || !hasImpostors) {
-      console.warn('⛔ calculateResults BLOQUEADO: Aborto físico a LOBBY.');
-      if (isTeacher) {
-        isProcessingRef.current = true;
-        await supabase.from('votes').delete().eq('room_id', roomId);
-        await supabase.from('game_state').update({ phase: 'LOBBY', current_turn_index: 0, is_paused: false, last_eliminated_info: null }).eq('room_id', roomId);
-        const resetPromises = players.map(p => supabase.from('players').update({ is_eliminated: false, turn_order: null }).eq('id', p.id));
-        await Promise.all(resetPromises);
-      }
+    // ── CANDADO ANTI-LATENCIA (Lectura Real-Time a la DB) ──
+    // Evadimos el estado local de React que puede estar desactualizado por milisegundos.
+    const { data: livePhysicalPlayers, error: fetchError } = await supabase
+      .from('players')
+      .select('id, role')
+      .eq('room_id', roomId)
+      .eq('is_host', false)
+      .eq('is_spectator', false);
+
+    if (fetchError || !livePhysicalPlayers) {
+      isProcessingRef.current = false;
       return;
     }
 
-    isProcessingRef.current = true; // <-- CIERRA EL CANDADO
+    const hasImpostorsLive = livePhysicalPlayers.some(p => p.role === 'IMPOSTOR');
 
+    // ── VERIFICACIÓN DE EMERGENCIA DIRECTA DE LA DB ──
+    if (livePhysicalPlayers.length < 3 || !hasImpostorsLive) {
+      console.warn('⛔ ABORTO CONFIRMADO: Jugador salió durante la votación. Abortando a LOBBY.');
+      if (isTeacher) {
+        await supabase.from('votes').delete().eq('room_id', roomId);
+        await supabase.from('game_state').update({
+          phase: 'LOBBY',
+          current_turn_index: 0,
+          is_paused: false,
+          last_eliminated_info: null
+        }).eq('room_id', roomId);
+
+        // Limpiamos a los supervivientes para el Lobby
+        // Limpiamos a TODOS para el Lobby (incluso si eran espectadores)
+        await supabase.from('players').update({ is_eliminated: false, turn_order: null, is_spectator: false }).eq('room_id', roomId);
+      }
+      return; // Fin de la ejecución. Jamás evaluará la victoria.
+    }
+
+    // ── SI EL QUÓRUM ESTÁ INTACTO, PROCESAMOS VOTOS NORMALMENTE ──
     const { data: liveVotes } = await supabase.from('votes').select('*').eq('room_id', roomId);
 
     if (!liveVotes || liveVotes.length === 0) {
+      console.log('🗳️ SIN VOTOS: Empate técnico por silencio.');
       await processRoundEnd(null);
       return;
     }
@@ -1523,7 +1568,13 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
 
     const maxVotes = Math.max(...Object.values(targetCounts), 0);
     const topCandidates = Object.keys(targetCounts).filter(id => targetCounts[id] === maxVotes);
+
+    // Solo se elimina si no hay empate en el máximo de votos
     const eliminatedId = topCandidates.length === 1 ? topCandidates[0] : null;
+
+    if (!eliminatedId && maxVotes > 0) {
+      console.log('⚖️ EMPATE DETECTADO: Varios jugadores tienen', maxVotes, 'votos. Nadie sale.');
+    }
 
     await processRoundEnd(eliminatedId);
   };
@@ -1576,7 +1627,7 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
   };
 
   return (
-    <div className="w-full max-w-4xl text-center flex flex-col items-center gap-0 pt-0 animate-in slide-in-from-bottom-8 min-h-fit">
+    <div className="w-full max-w-4xl text-center md:pt-32 flex flex-col items-center gap-0 pt-0 animate-in slide-in-from-bottom-8 min-h-fit">
       <div className="flex flex-col md:flex-row items-center justify-center gap-0 md:gap-10 w-full bg-black/40 backdrop-blur-xl p-4 md:p-8 rounded-[40px] border border-white/10 shadow-[0_40px_100px_rgba(0,0,0,0.4)] animate-pulse-slow shadow-neon-pulse-violet">
         <div className="relative w-20 h-20 md:w-56 md:h-56 flex items-center justify-center">
           <svg className="absolute w-full h-full -rotate-90" viewBox="0 0 100 100">
@@ -1737,7 +1788,7 @@ function PhaseResults({ isTeacher, roomId, players }: { isTeacher: boolean, room
   // 2. Contamos vivos de cada bando
   const aliveImpostorsCount = allImpostors.filter((p: any) => !p.is_eliminated).length;
   const aliveNativesCount = players.filter((p: any) =>
-    p.role !== 'IMPOSTOR' && !p.is_eliminated && !p.is_host
+    p.role !== 'IMPOSTOR' && !p.is_eliminated && !p.is_host && !p.is_spectator // <-- Se agregó !p.is_spectator
   ).length;
 
   // 3. Lógica de victoria: El impostor gana si:
@@ -1802,7 +1853,7 @@ function PhaseResults({ isTeacher, roomId, players }: { isTeacher: boolean, room
         <button
           onClick={async () => {
             console.warn('📝 DB WRITE - Cambiando game_state:', { nuevaFase: 'LOBBY', disparadoPor: 'Reset Protocol' });
-            await supabase.from('players').update({ is_eliminated: false, turn_order: null }).eq('room_id', roomId);
+            await supabase.from('players').update({ is_eliminated: false, turn_order: null, is_spectator: false }).eq('room_id', roomId);
             await supabase.from('game_state').update({ phase: 'LOBBY', current_turn_index: 0, last_eliminated_info: null }).eq('room_id', roomId);
           }}
           className="px-24 py-2 md:py-6 bg-gradient-to-r from-whapigen-cyan to-purple-600 text-black hover:scale-105 active:scale-95 font-sora font-black tracking-[0.5em] uppercase rounded-full transition-all shadow-2xl mt-12 ring-2 ring-white/10"
@@ -1824,7 +1875,7 @@ function PhaseStandby({ isTeacher, roomId, players, gameState }: { isTeacher: bo
     isStartingRef.current = true;
 
     const alivePlayers = players
-      .filter(p => !p.is_eliminated && !p.is_host)
+      .filter(p => !p.is_eliminated && !p.is_host && !p.is_spectator)
       .sort((a, b) => (a.turn_order || 0) - (b.turn_order || 0));
 
     if (alivePlayers.length === 0) {
@@ -1870,12 +1921,11 @@ function PhaseStandby({ isTeacher, roomId, players, gameState }: { isTeacher: bo
 }
 
 // ---------------- PERSISTENT WORD HELPER ----------------
-function PersistentWordBar({ role, secretWord, hintsEnabled, hints, phaseStartedAt }: {
+function PersistentWordBar({ role, secretWord, hintsEnabled, hints }: {
   role?: string;
   secretWord: string | null;
   hintsEnabled?: boolean;
   hints?: [string, string] | null;
-  phaseStartedAt?: string | null;
 }) {
   const [revealed, setRevealed] = useState(false);
   const [canReceiveIntel, setCanReceiveIntel] = useState(false);
