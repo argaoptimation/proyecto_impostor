@@ -722,9 +722,36 @@ function PhaseLobby({ isTeacher, roomId, players, roomLevel }: { isTeacher: bool
     const candidates = livePlayers.filter(p => (history[p.id] || 0) < 2);
     const candidatePool = candidates.length >= impostorCount ? candidates : livePlayers;
 
-    // Shuffle candidates and pick impostors
-    const shuffledCandidates = [...candidatePool].sort(() => Math.random() - 0.5);
-    const impostorIds = new Set<string>(shuffledCandidates.slice(0, impostorCount).map(p => p.id));
+    // ── WEIGHTED LOTTERY: Impostor selection ──────────────────────────────────
+    // Frecuencia de impostores
+    // FIRST_PLAYER_IMPOSTOR_WEIGHT controls how likely index-0 of the DB result
+    // is to become impostor relative to everyone else:
+    //   1.0 → same odds as any other player (normal)
+    //   0.5 → half the odds (reduced bias fix)
+    //   0.0 → impossible to be impostor
+    const FIRST_PLAYER_IMPOSTOR_WEIGHT = 0.5;
+
+    // Weighted random draw (cumulative CDF approach — unbiased):
+    const weights = candidatePool.map((_, idx) => idx === 0 ? FIRST_PLAYER_IMPOSTOR_WEIGHT : 1);
+    const totalWeight = weights.reduce((a, b) => a + b, 0);
+
+    const impostorIds = new Set<string>();
+    const remaining = [...candidatePool]; // mutable pool so we don't pick the same player twice
+    const remainingWeights = [...weights];
+
+    for (let pick = 0; pick < impostorCount; pick++) {
+      const total = remainingWeights.reduce((a, b) => a + b, 0);
+      let rand = Math.random() * total;
+      let chosen = 0;
+      for (let i = 0; i < remaining.length; i++) {
+        rand -= remainingWeights[i];
+        if (rand <= 0) { chosen = i; break; }
+      }
+      impostorIds.add(remaining[chosen].id);
+      remaining.splice(chosen, 1);
+      remainingWeights.splice(chosen, 1);
+    }
+    console.log(`[Role Allocator] FIRST_PLAYER_IMPOSTOR_WEIGHT=${FIRST_PLAYER_IMPOSTOR_WEIGHT}, totalWeight=${totalWeight.toFixed(2)}, impostors:`, [...impostorIds]);
 
     // Update history: +1 for impostors, reset to 0 for natives
     const newHistory: Record<string, number> = {};
@@ -737,7 +764,14 @@ function PhaseLobby({ isTeacher, roomId, players, roomLevel }: { isTeacher: bool
     const wordEntry = getRandomWordEntry(roomLevel);
 
     // ── DISTRIBUTE ROLES AND INITIAL TURN ORDER ──
-    const shuffledForOrder = [...livePlayers].sort(() => Math.random() - 0.5);
+    // Fisher-Yates shuffle: guarantees a perfectly uniform distribution.
+    // `.sort(() => Math.random() - 0.5)` is NOT uniform — each element's
+    // final position depends on how many comparisons it wins, which varies.
+    const shuffledForOrder = [...livePlayers];
+    for (let i = shuffledForOrder.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffledForOrder[i], shuffledForOrder[j]] = [shuffledForOrder[j], shuffledForOrder[i]];
+    }
     const turnOrderMap = new Map(shuffledForOrder.map((p, i) => [p.id, i]));
 
     const roleUpdates = livePlayers.map(p => {
@@ -1258,9 +1292,9 @@ function PhaseSpeaking({ isTeacher, room, gameState, players }: { isTeacher: boo
       });
 
     return () => { cancelled = true; };
-  // playerIdsString fires when the player list actually changes (deletion/addition).
-  // gameState.current_turn_player_id fires when the active turn changes.
-  // Together they cover every scenario without the 500ms timer-tick noise.
+    // playerIdsString fires when the player list actually changes (deletion/addition).
+    // gameState.current_turn_player_id fires when the active turn changes.
+    // Together they cover every scenario without the 500ms timer-tick noise.
   }, [playerIdsString, gameState.current_turn_player_id, gameState.phase, isTeacher]); // eslint-disable-line react-hooks/exhaustive-deps
 
 
@@ -1831,18 +1865,13 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
 
       {isTeacher && (
         <div className="flex flex-col items-center mt-8 space-y-4">
-          {votes.length < alivePlayers.length ? (
-            <div className="text-white/70 font-jetbrains text-xs tracking-[0.6em] animate-pulse border border-white/5 p-6 rounded-full bg-white/5 uppercase font-black backdrop-blur-xl px-12 shadow-inner">
-              Consensus in Progress: {votes.length}/{alivePlayers.length}
-            </div>
-          ) : (
-            <button
-              onClick={calculateResults}
-              className="h-20 px-24 bg-gradient-to-r from-whapigen-cyan to-purple-600 text-black hover:scale-105 active:scale-95 font-sora font-black tracking-[0.4em] uppercase rounded-full transition-all shadow-[0_20px_60px_rgba(0,240,255,0.2)] hover:shadow-neon-cyan/50 ring-2 ring-white/10"
-            >
-              Authorize Verdict
-            </button>
-          )}
+          {/* Vote progress — always visible. Closing is handled automatically by the
+              votes-complete useEffect and the timer useEffect. No manual button needed. */}
+          <div className={`text-white/70 font-jetbrains text-xs tracking-[0.6em] border p-6 rounded-full bg-white/5 uppercase font-black backdrop-blur-xl px-12 shadow-inner ${votes.length >= alivePlayers.length ? 'border-whapigen-cyan/40 text-whapigen-cyan animate-pulse' : 'border-white/5 animate-pulse'}`}>
+            {votes.length >= alivePlayers.length
+              ? `Consensus Reached: ${votes.length}/${alivePlayers.length} — Processing...`
+              : `Consensus in Progress: ${votes.length}/${alivePlayers.length}`}
+          </div>
         </div>
       )}
     </div>
@@ -1920,7 +1949,7 @@ function PhaseResults({ isTeacher, roomId, players }: { isTeacher: boolean, room
       </div>
 
       {/* Scoreboard */}
-      <div className="bg-black/60 backdrop-blur-xl border border-white/10 rounded-[40px] p-4 md:p-8 mt-4 md:mt-4 shadow-[0_40px_100px_rgba(0,0,0,0.5)] w-full max-w-2xl transform hover:scale-[1.02] transition-transform duration-700 shadow-neon-pulse-cyan">
+      <div className="bg-black/60 backdrop-blur-xl border border-white/10 rounded-[20px] p-2 md:p-8 mt-2 md:mt-4 shadow-[0_40px_100px_rgba(0,0,0,0.5)] w-full max-w-2xl transform hover:scale-[1.02] transition-transform duration-700 shadow-neon-pulse-cyan">
         <h3 className="text-white font-black font-jetbrains tracking-[0.4em] md:tracking-[0.8em] text-sm md:text-lg mb-0 md:mb-3 border-b border-white/5 pb-6 uppercase text-center w-full">
           Scoreboard
         </h3>
@@ -1929,16 +1958,16 @@ function PhaseResults({ isTeacher, roomId, players }: { isTeacher: boolean, room
             .filter((p: any) => !p.is_host)
             .sort((a: any, b: any) => (b.score - a.score) || a.nickname.localeCompare(b.nickname))
             .map((p: any) => (
-              <div key={p.id} className="flex justify-between items-center bg-white/[0.03] p-1 rounded-[30px] border border-white/5 transition-all hover:bg-white/[0.06] hover:border-whapigen-cyan/20 group/row group relative overflow-x-hidden">
+              <div key={p.id} className="flex justify-between items-center bg-white/[0.03] p-0.5 rounded-[30px] border border-white/5 transition-all hover:bg-white/[0.06] hover:border-whapigen-cyan/20 group/row group relative overflow-x-hidden">
                 <div className="absolute inset-0 bg-gradient-to-r from-whapigen-cyan/5 to-transparent opacity-0 group-hover/row:opacity-100 transition-opacity"></div>
                 <div className="flex items-center gap-2 md:gap-4 relative z-10">
                   <div className={`w-3 h-3 rounded-full ${p.is_eliminated ? 'bg-gray-800' : 'bg-whapigen-cyan shadow-neon-cyan'}`}></div>
-                  <span className={`font-sora tracking-tighter text-xl uppercase ${p.is_eliminated ? 'text-white/20 line-through' : 'text-white font-black'}`}>{p.nickname}</span>
+                  <span className={`font-sora tracking-tighter text-[11px] md:text-[18px] uppercase ${p.is_eliminated ? 'text-white/20 line-through' : 'text-white font-black'}`}>{p.nickname}</span>
                 </div>
-                <div className="relative z-10">
-                  <span className="font-jetbrains font-black text-white text-[12px] md:text-[18px] tracking-widest px-5 py-2 bg-white/5 rounded-full border border-white/5 group-hover/row:bg-whapigen-cyan group-hover/row:text-black transition-all group-hover/row:scale-110">
+                <div className="relative z-10 mr-1 md:mr-2"> {/* <-- Margen derecho extra para el hover */}
+                  <div className="inline-block font-jetbrains font-black text-white text-[11px] md:text-[18px] tracking-widest px-3 py-0.5 bg-white/5 rounded-full border border-white/5 group-hover/row:bg-whapigen-cyan group-hover/row:text-black transition-all duration-300 group-hover/row:scale-110 transform origin-right">
                     {p.score || 0} PTS
-                  </span>
+                  </div>
                 </div>
               </div>
             ))}
