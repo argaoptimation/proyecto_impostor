@@ -385,9 +385,33 @@ export default function PlayRoom() {
 
   const handleLeave = async () => {
     if (isStudent && studentData?.playerId) {
-      await supabase.from('players').delete().eq('id', studentData.playerId);
-      setStudentData(null);
-      navigate('/join');
+      const pid = studentData.playerId;
+      try {
+        // 1. Emit broadcast FIRST so the admin receives the leave signal
+        //    while the student's WebSocket connection is still alive.
+        await supabase.channel(`room:${roomId}`).send({
+          type: 'broadcast',
+          event: 'PLAYER_LEFT',
+          payload: { playerId: pid },
+        });
+
+        // 2. Delete the player row and wait for confirmation.
+        //    The await ensures the HTTP request completes before we unmount.
+        await supabase.from('players').delete().eq('id', pid);
+
+        // 3. Safety delay: gives Supabase Realtime ~200ms to propagate the
+        //    DELETE event to other subscribers before navigation tears down
+        //    this client's WebSocket and React component tree.
+        await new Promise(r => setTimeout(r, 200));
+      } catch (e) {
+        // Non-fatal: log but continue — the player should still leave the room.
+        console.warn('LEAVE: Error during cleanup:', e);
+      } finally {
+        // 4. Clear local session and navigate regardless of network errors.
+        sessionStorage.clear();
+        setStudentData(null);
+        navigate('/join');
+      }
     } else if (isTeacher) {
       navigate('/admin/dashboard');
     }
@@ -1135,10 +1159,13 @@ function PhaseSpeaking({ isTeacher, room, gameState, players }: { isTeacher: boo
   }, [gameState.is_paused]);
 
   useEffect(() => {
-    if (actualTimeLeft <= 0 && isTeacher && !gameState.is_paused) {
+    // GUARD: only fire when the game is actively in SPEAKING_TURNS and time has expired.
+    // Without this, a stale effect re-run after a phase change would call handleNextTurn
+    // on a phase that no longer needs it, causing ghost DB writes.
+    if (actualTimeLeft <= 0 && isTeacher && !gameState.is_paused && gameState.phase === 'SPEAKING_TURNS') {
       handleNextTurn();
     }
-  }, [actualTimeLeft, isTeacher, gameState.is_paused]);
+  }, [actualTimeLeft, isTeacher, gameState.is_paused, gameState.phase]);
 
   // Initial GSAP setup
   useEffect(() => {
@@ -1199,26 +1226,52 @@ function PhaseSpeaking({ isTeacher, room, gameState, players }: { isTeacher: boo
     return () => { if (tlRef.current) tlRef.current.kill(); };
   }, [gameState.is_paused]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── EFECTO CORREGIDO: SALTAR TURNO SI EL JUGADOR ABANDONA ──
-  useEffect(() => {
-    // Buscamos al jugador directamente adentro del efecto
-    const activePlayer = players.find((p: any) => p.id === gameState.current_turn_player_id);
+  // Stable primitive dep: only changes when the actual SET of player IDs changes,
+  // not on every .filter() call that would generate a new array reference on each render.
+  const playerIdsString = players.map((p: any) => p.id).sort().join(',');
 
-    // Si somos el admin, hay un turno activo, pero el jugador ya no existe en el array
-    if (isTeacher && gameState.current_turn_player_id && !activePlayer) {
-      console.warn('🚨 JUGADOR DESCONECTADO EN SU TURNO. Saltando turno...');
-      handleNextTurn();
-    }
-  }, [players, isTeacher, gameState.current_turn_player_id]); // <-- Depender de 'players' obliga al efecto a ejecutarse al borrar a alguien
+  // ── DISCONNECT DETECTOR: saltar turno si el jugador activo abandona ──
+  useEffect(() => {
+    if (!isTeacher) return;
+    if (gameState.phase !== 'SPEAKING_TURNS') return;
+    if (!gameState.current_turn_player_id) return;
+
+    // Fast path: if the active player is still in the local list, nothing to do.
+    const inLocalList = players.some((p: any) => p.id === gameState.current_turn_player_id);
+    if (inLocalList) return;
+
+    // Player is missing from local state. Confirm with DB before acting
+    // to avoid a false-positive on a transient render where props lag behind.
+    let cancelled = false;
+    supabase
+      .from('players')
+      .select('id')
+      .eq('id', gameState.current_turn_player_id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (cancelled) return;
+        if (!data) {
+          // Confirmed gone from DB — safe to advance the turn.
+          console.warn('🚨 DISCONNECT DETECTOR: jugador confirmado ausente en DB. Saltando turno...');
+          handleNextTurn();
+        }
+      });
+
+    return () => { cancelled = true; };
+  // playerIdsString fires when the player list actually changes (deletion/addition).
+  // gameState.current_turn_player_id fires when the active turn changes.
+  // Together they cover every scenario without the 500ms timer-tick noise.
+  }, [playerIdsString, gameState.current_turn_player_id, gameState.phase, isTeacher]); // eslint-disable-line react-hooks/exhaustive-deps
+
 
   const handleNextTurn = async () => {
     const hasImpostors = players.some((p: any) => p.role === 'IMPOSTOR' && !p.is_host);
     const validPlayersCount = players.filter((p: any) => !p.is_host && !p.is_eliminated).length;
 
-    // CANDADO ABSOLUTO
-    if (gameState.phase === 'LOBBY' || validPlayersCount < 3 || !hasImpostors) {
+    // CANDADO ABSOLUTO: no escribir si el quórum mínimo ya no se cumple
+    if (validPlayersCount < 3 || !hasImpostors) {
       console.warn('⛔ handleNextTurn BLOQUEADO: Faltan jugadores o el Impostor abandonó la sala.');
-      return; // <--- ESTO ES LO QUE FALTABA PARA FRENAR LA EJECUCIÓN
+      return;
     }
 
     const nextCandidates = players
@@ -1259,20 +1312,63 @@ function PhaseSpeaking({ isTeacher, room, gameState, players }: { isTeacher: boo
 
   return (
     <div className="flex flex-col items-center justify-center gap-2 w-full md:pt-48 animate-in zoom-in-95 duration-500 min-h-[50vh]">
-      <div className="text-center space-y-2 px-4">
-        <h3 className="text-whapigen-cyan font-jetbrains tracking-[0.2em] pt-4 text-xs md:text-sm uppercase">
-          {currentPlayer && studentData?.playerId && currentPlayer.id === studentData.playerId ? (
-            <span key="your-turn" className="animate-pulse shadow-neon-pulse-cyan px-4 py-1 rounded-full border border-whapigen-cyan/30">YOUR TURN TO OPERATE</span>
-          ) : (
-            <span key="waiting-for" className="text-white/70">{`WAITING FOR ${currentPlayer?.nickname || '...'}`}</span>
-          )}
-        </h3>
-        <h2 className={`text-3xl md:text-6xl font-sora font-bold text-white uppercase flex items-center justify-center gap-2 ${currentPlayer && studentData?.playerId && currentPlayer.id === studentData.playerId ? 'border-neon-active p-8 rounded-[40px] bg-whapigen-cyan/5' : 'border-4 border-transparent p-8 drop-shadow-neon-cyan opacity-80'}`}>
-          <span key="arrow-left" className={`arrow-indicator ${currentPlayer && studentData?.playerId && currentPlayer.id === studentData.playerId ? 'opacity-100' : 'opacity-0 invisible'}`}>{">>"}</span>
-          <span key="player-name">{currentPlayer?.nickname || '...'}</span>
-          <span key="arrow-right" className={`arrow-indicator ${currentPlayer && studentData?.playerId && currentPlayer.id === studentData.playerId ? 'opacity-100' : 'opacity-0 invisible'}`}>{"<<"}</span>
-        </h2>
-      </div>
+
+      {/* ── GHOST PLAYER STATE ── shown when active player left mid-turn */}
+      {(() => {
+        const isCurrentPlayerMissing = !players.some((p: any) => p.id === gameState.current_turn_player_id);
+
+        if (isCurrentPlayerMissing) {
+          return (
+            <div className="text-center space-y-3 px-4 animate-in fade-in duration-300">
+              {isTeacher ? (
+                // Admin: llamativo, con instrucción de acción clara
+                <div className="flex flex-col items-center gap-4">
+                  <div className="bg-whapigen-red/10 border border-whapigen-red/40 rounded-[20px] px-6 py-4 max-w-sm animate-pulse">
+                    <p className="text-whapigen-red font-jetbrains font-black text-[11px] tracking-[0.3em] uppercase text-center leading-relaxed">
+                      🚨 EL JUGADOR ABANDONÓ LA MISIÓN
+                    </p>
+                    <p className="text-whapigen-red/70 font-jetbrains text-[10px] tracking-[0.2em] uppercase text-center mt-2">
+                      PRESIONA FORCE SKIP PARA CONTINUAR
+                    </p>
+                  </div>
+                  <h2 className="text-3xl md:text-5xl font-sora font-bold text-whapigen-red/40 uppercase p-8">
+                    — — —
+                  </h2>
+                </div>
+              ) : (
+                // Alumnos: mensaje tranquilo, sin alarmar
+                <div className="flex flex-col items-center gap-4">
+                  <h3 className="text-white/40 font-jetbrains tracking-[0.2em] pt-4 text-xs md:text-sm uppercase">
+                    <span className="px-4 py-1">⚠️ JUGADOR DESCONECTADO</span>
+                  </h3>
+                  <h2 className="text-xl md:text-3xl font-sora font-bold text-white/30 uppercase p-8">
+                    Esperando al Coordinador...
+                  </h2>
+                </div>
+              )}
+            </div>
+          );
+        }
+
+        // ── Normal render when active player exists ──
+        return (
+          <div className="text-center space-y-2 px-4">
+            <h3 className="text-whapigen-cyan font-jetbrains tracking-[0.2em] pt-4 text-xs md:text-sm uppercase">
+              {currentPlayer && studentData?.playerId && currentPlayer.id === studentData.playerId ? (
+                <span key="your-turn" className="animate-pulse shadow-neon-pulse-cyan px-4 py-1 rounded-full border border-whapigen-cyan/30">YOUR TURN TO OPERATE</span>
+              ) : (
+                <span key="waiting-for" className="text-white/70">{`WAITING FOR ${currentPlayer?.nickname || '...'}`}</span>
+              )}
+            </h3>
+            <h2 className={`text-3xl md:text-6xl font-sora font-bold text-white uppercase flex items-center justify-center gap-2 ${currentPlayer && studentData?.playerId && currentPlayer.id === studentData.playerId ? 'border-neon-active p-8 rounded-[40px] bg-whapigen-cyan/5' : 'border-4 border-transparent p-8 drop-shadow-neon-cyan opacity-80'}`}>
+              <span key="arrow-left" className={`arrow-indicator ${currentPlayer && studentData?.playerId && currentPlayer.id === studentData.playerId ? 'opacity-100' : 'opacity-0 invisible'}`}>{">>"}</span>
+              <span key="player-name">{currentPlayer?.nickname || '...'}</span>
+              <span key="arrow-right" className={`arrow-indicator ${currentPlayer && studentData?.playerId && currentPlayer.id === studentData.playerId ? 'opacity-100' : 'opacity-0 invisible'}`}>{"<<"}</span>
+            </h2>
+          </div>
+        );
+      })()}
+
 
       <div className="relative w-48 h-48 md:w-64 md:h-64 flex items-center justify-center">
         {/* Glow behind :Degradado radial nativo para evitar el corte cuadrado */}
