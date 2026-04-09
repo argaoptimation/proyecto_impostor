@@ -57,11 +57,7 @@ export default function JoinScreen() {
       if (countError) throw countError;
       if (count !== null && count >= 16) throw new Error('LA SALA ESTÁ LLENA (16/16)');
 
-<<<<<<< HEAD
-      // 3. CANDADO ANTI-CLONES (Estricto, sin borrar a nadie)
-=======
       // 3. CANDADO ANTI-CLONES
->>>>>>> main
       const { data: existingPlayer } = await supabase
         .from('players')
         .select('id')
@@ -70,10 +66,6 @@ export default function JoinScreen() {
         .maybeSingle();
 
       if (existingPlayer) {
-<<<<<<< HEAD
-        // Si el nombre ya existe, bloqueamos la entrada directamente.
-=======
->>>>>>> main
         throw new Error('⚠️ DUPLICATE IDENTITY: PLAYER ALREADY IN THE ROOM');
       }
 
