@@ -173,8 +173,8 @@ export default function AdminDashboard() {
             <h1 className="text-header-premium text-xl md:text-3xl">
               CIL LENGUAS
             </h1>
-            <p className="text-[8px] md:text-[9px] font-jetbrains text-purple-400 uppercase tracking-widest md:tracking-[0.5em] mt-1 md:mt-2 opacity-60 flex items-center gap-1 md:gap-2 line-clamp-1">
-              <ShieldCheck className="w-3 h-3 text-whapigen-cyan animate-pulse shrink-0" /> COMMAND CENTER
+            <p className="text-[9px] md:text-[10px] font-jetbrains text-purple-400 uppercase tracking-widest md:tracking-[0.5em] mt-1 md:mt-2 opacity-60 flex items-center gap-1 md:gap-2 line-clamp-1">
+              <ShieldCheck className="w-4 h-4 text-whapigen-cyan animate-pulse shrink-0" /> COMMAND CENTER
             </p>
           </div>
         </div>
@@ -190,11 +190,11 @@ export default function AdminDashboard() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 relative z-10 flex-grow py-4 items-start">
 
-        <div className="md:col-span-1 bg-white/5 backdrop-blur-xl border border-white/10 rounded-[40px] p-5 flex flex-col gap-6 h-fit max-h-[75vh] overflow-y-auto relative group shadow-2xl animate-in slide-in-from-left duration-700">
+        <div className="md:col-span-1 bg-white/5 backdrop-blur-xl border border-white/10 rounded-[40px] p-5 flex flex-col gap-4 h-fit max-h-[75vh] overflow-y-auto relative group shadow-2xl animate-in slide-in-from-left duration-700">
           <div className="absolute top-0 right-0 w-2 h-full bg-gradient-to-b from-whapigen-cyan to-purple-600 blur-sm transition-all duration-500 opacity-50 group-hover:opacity-100"></div>
           <h2 className="text-xs font-black font-sora text-white tracking-[0.3em] flex items-center gap-4 uppercase">
             <div className="p-3 bg-gradient-to-br from-whapigen-cyan/20 to-purple-600/20 rounded-2xl border border-white/5">
-              <Plus className="w-5 h-5 text-whapigen-cyan" />
+              <Plus className="w-3 h-3 md:w-5 md:h-5 text-whapigen-cyan" />
             </div>
             SETUP PROTOCOL
           </h2>
@@ -257,7 +257,7 @@ export default function AdminDashboard() {
           </div>
 
           <button
-            className="w-full bg-gradient-to-r from-whapigen-cyan to-purple-600 hover:from-white hover:to-white text-black font-sora tracking-[0.3em] font-black h-16 flex items-center justify-center transition-all rounded-full group/btn mt-0 md:mt-6 disabled:opacity-50 disabled:cursor-not-allowed uppercase shadow-[0_10px_40px_rgba(0,240,255,0.2)] hover:shadow-neon-cyan/50 hover:-translate-y-1 active:translate-y-0"
+            className="w-full bg-gradient-to-r from-whapigen-cyan to-purple-600 hover:from-white hover:to-white text-black font-sora tracking-[0.2em] font-black h-6 flex items-center justify-center transition-all rounded-full group/btn mt-0 md:mt-6 disabled:opacity-50 disabled:cursor-not-allowed uppercase shadow-[0_10px_40px_rgba(0,240,255,0.2)] hover:shadow-neon-cyan/50 hover:-translate-y-1 active:translate-y-0"
             onClick={createRoom}
             disabled={isCreating}
           >

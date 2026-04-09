@@ -460,7 +460,7 @@ export default function PlayRoom() {
 
       {/* STUDENT IDENTITY LABEL */}
       {!isTeacher && studentData?.nickname && (
-        <div className="relative md:fixed md:bottom-8 md:left-8 z-50 pointer-events-none mt-4 md:mt-0 px-8 md:px-0">
+        <div className="relative md:fixed md:bottom-8 md:left-8 z-50 pointer-events-none mt-4 mb-2 md:mb-0 md:mt-0 px-8 md:px-0">
           <div className="bg-gradient-to-r from-whapigen-cyan/20 to-purple-600/20 backdrop-blur-2xl border border-white/10 px-6 py-3 rounded-full shadow-2xl flex items-center gap-3">
             <div className="w-2 h-2 rounded-full bg-whapigen-cyan animate-pulse shadow-[0_0_10px_#00f0ff]"></div>
             <span className="font-jetbrains text-xs tracking-[0.4em] text-white/70 font-black uppercase">
@@ -806,11 +806,11 @@ function PhaseLobby({ isTeacher, roomId, players, roomLevel }: { isTeacher: bool
   const [showBriefing, setShowBriefing] = useState(false);
 
   return (
-    <div className="relative z-40 md:z-auto w-full max-w-2xl text-center space-y-4 pt-0 animate-in fade-in duration-500">
+    <div className={`relative z-40 md:z-auto w-full max-w-2xl text-center space-y-4 animate-in fade-in duration-500 ${isTeacher ? 'pt-4 md:pt-0' : 'pt-32 md:pt-0'}`}>
 
       <div className="mb-8 relative">
         <Target className="w-24 h-24 mx-auto text-whapigen-cyan/20 absolute -top-4 left-1/2 -translate-x-1/2 -rotate-45" />
-        <h2 className="text-4xl md:text-5xl font-sora font-extrabold text-white uppercase tracking-tight relative z-10">
+        <h2 className="text-2xl md:text-5xl font-sora font-extrabold text-white uppercase tracking-tight relative z-10">
           Waiting for
           <br />
           <span className="text-transparent bg-clip-text bg-gradient-to-r from-whapigen-cyan to-purple-400 drop-shadow-[0_0_15px_rgba(0,240,255,0.4)]">
@@ -1387,7 +1387,7 @@ function PhaseSpeaking({ isTeacher, room, gameState, players }: { isTeacher: boo
         // ── Normal render when active player exists ──
         return (
           <div className="text-center space-y-2 px-4">
-            <h3 className="text-whapigen-cyan font-jetbrains tracking-[0.2em] pt-4 text-xs md:text-sm uppercase">
+            <h3 className="text-whapigen-cyan font-jetbrains tracking-[0.2em] pt-0 md:pt-4 text-xs md:text-sm uppercase">
               {currentPlayer && studentData?.playerId && currentPlayer.id === studentData.playerId ? (
                 <span key="your-turn" className="animate-pulse shadow-neon-pulse-cyan px-4 py-1 rounded-full border border-whapigen-cyan/30">YOUR TURN TO OPERATE</span>
               ) : (
@@ -1805,17 +1805,17 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
           return (
             <div
               key={p.id}
-              className={`px-2 md:px-12 py-4 bg-black/40 backdrop-blur-xl border transition-all duration-700 flex flex-col items-center justify-between rounded-[30px] shadow-2xl relative overflow-x-hidden group/card animate-pulse-slow ${voteCount > 0 ? 'border-whapigen-red shadow-[0_0_80px_rgba(255,49,49,0.15)] bg-whapigen-red/5' : 'border-white/10 hover:border-whapigen-cyan/30'}`}
+              className={`px-2 md:px-12 py-2 md:py-4 bg-black/40 backdrop-blur-xl border transition-all duration-700 flex flex-col items-center justify-between rounded-[30px] shadow-2xl relative overflow-x-hidden group/card animate-pulse-slow ${voteCount > 0 ? 'border-whapigen-red shadow-[0_0_80px_rgba(255,49,49,0.15)] bg-whapigen-red/5' : 'border-white/10 hover:border-whapigen-cyan/30'}`}
             >
               <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-whapigen-cyan to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity"></div>
               <div className="relative z-10 flex flex-col items-center w-full">
-                <div className="w-12 h-12 rounded-2xl mb-2 bg-white/[0.03] flex items-center justify-center border border-white/5 shadow-inner group-hover/card:scale-110 transition-transform duration-500">
-                  <Users className="w-6 h-6 text-whapigen-cyan/20 group-hover/card:text-whapigen-cyan transition-colors" />
+                <div className="w-6 h-6 md:w-12 md:h-12 rounded-2xl mb-2 bg-white/[0.03] flex items-center justify-center border border-white/5 shadow-inner group-hover/card:scale-110 transition-transform duration-500">
+                  <Users className="w-4 h-4 md:w-6 md:h-6 text-whapigen-cyan/20 group-hover/card:text-whapigen-cyan transition-colors" />
                 </div>
-                <p className="text-white font-sora tracking-tighter font-black uppercase text-2xl group-hover/card:text-whapigen-cyan transition-colors">{p.nickname}</p>
+                <p className="text-white font-sora tracking-tighter font-black uppercase text-xl md:text-2xl group-hover/card:text-whapigen-cyan transition-colors">{p.nickname}</p>
                 {isTeacher && (
-                  <div className="flex flex-col items-center gap-4 mt-4 w-full">
-                    <span className="text-white font-black font-jetbrains text-xs tracking-[0.3em] uppercase md:px-6 px-4 py-2 rounded-full border border-white/5 bg-white/5">
+                  <div className="flex flex-col items-center gap-2 md:gap-4 mt-4 w-full">
+                    <span className="text-white font-black font-jetbrains text-xs tracking-[0.1em] uppercase md:px-6 px-2 py-1 md:py-2 rounded-full border border-white/5 bg-white/5">
                       Votes: {voteCount}
                     </span>
                     <button
@@ -1864,10 +1864,10 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
       </div>
 
       {isTeacher && (
-        <div className="flex flex-col items-center mt-8 space-y-4">
+        <div className="flex flex-col items-center mt-4 md:mt-8 space-y-4">
           {/* Vote progress — always visible. Closing is handled automatically by the
               votes-complete useEffect and the timer useEffect. No manual button needed. */}
-          <div className={`text-white/70 font-jetbrains text-xs tracking-[0.6em] border p-6 rounded-full bg-white/5 uppercase font-black backdrop-blur-xl px-12 shadow-inner ${votes.length >= alivePlayers.length ? 'border-whapigen-cyan/40 text-whapigen-cyan animate-pulse' : 'border-white/5 animate-pulse'}`}>
+          <div className={`text-white/70 font-jetbrains text-xs tracking-[0.2em] border p-4 rounded-full bg-white/5 uppercase font-black backdrop-blur-xl px-12 shadow-inner ${votes.length >= alivePlayers.length ? 'border-whapigen-cyan/40 text-whapigen-cyan animate-pulse' : 'border-white/5 animate-pulse'}`}>
             {votes.length >= alivePlayers.length
               ? `Consensus Reached: ${votes.length}/${alivePlayers.length} — Processing...`
               : `Consensus in Progress: ${votes.length}/${alivePlayers.length}`}
