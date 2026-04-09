@@ -31,6 +31,7 @@ interface GameState {
   current_round: number;
   max_rounds: number;
   created_at: string;
+  last_eliminated_info?: { nickname: string; wasImpostor: boolean } | null;
 }
 
 export interface Room {
@@ -221,7 +222,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
           const { data } = await supabase.from('players').select('*').eq('room_id', roomId);
           if (data) setPlayers(data);
         })
-        .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'players', filter: `room_id=eq.${roomId}` }, async (payload) => {
+        .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'players' }, async (payload) => {
           const sd = studentDataRef.current;
           const deletedId = (payload.old as any)?.id;
 
@@ -261,13 +262,29 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
           // ── HARD ABORT: now handled exclusively by the single-shot watcher in PlayRoom.tsx ──
         })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` }, (payload) => {
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` }, async (payload) => {
           if (payload.eventType === 'DELETE') {
+            // PATCH 2: Verify the deletion against live DB before redirecting.
+            // A false positive here boots the admin out of the room erroneously.
+            // Re-fetch the room to confirm it is truly gone (not a Realtime glitch).
+            const { data: stillExists } = await supabase
+              .from('rooms')
+              .select('id, host_id')
+              .eq('id', roomId)
+              .maybeSingle();
+
+            if (stillExists) {
+              // Room still exists — this was a Realtime false positive. Ignore.
+              console.warn('ROOMS DELETE: false positive — room still in DB, ignoring redirect.');
+              return;
+            }
+
+            // Room is truly gone. Redirect based on identity.
             if (userIdRef.current) {
-              console.warn('🚨 SALA ELIMINADA - Retornando Admin al Dashboard');
+              console.warn('🚨 SALA ELIMINADA (confirmada) - Retornando Admin al Dashboard');
               window.location.href = '/admin/dashboard';
             } else {
-              console.warn('🚨 SALA ELIMINADA POR ADMIN - Expulsando a /join');
+              console.warn('🚨 SALA ELIMINADA POR ADMIN (confirmada) - Expulsando a /join');
               sessionStorage.clear();
               window.location.href = '/join';
             }
@@ -305,13 +322,33 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
         presenceChannel.subscribe(async (status) => {
           if (status === 'SUBSCRIBED') {
-            const pid = studentDataRef.current!.playerId;
+            // PATCH 1: use optional chaining — studentData may be null if the
+            // student already pressed LEAVE MISSION before this callback fires.
+            const pid = studentDataRef.current?.playerId;
+            if (!pid) {
+              console.warn('PRESENCE: SUBSCRIBED fired but studentDataRef is already null — skipping track.');
+              return;
+            }
             await presenceChannel!.track({ player_id: pid, ts: Date.now() });
 
             keepAliveInterval = window.setInterval(async () => {
+              // Guard: student may have left mid-session.
+              const livePid = studentDataRef.current?.playerId;
+              if (!livePid) {
+                // Self-terminate silently — the effect cleanup will also clear this,
+                // but we do it here too so the interval stops immediately on leave
+                // rather than firing up to 10s later.
+                if (keepAliveInterval !== null) {
+                  window.clearInterval(keepAliveInterval);
+                  keepAliveInterval = null;
+                }
+                // No console.warn here — this path is expected on logout/leave
+                // and logging it every tick was causing spam in the console.
+                return;
+              }
               if (presenceChannel) {
                 try {
-                  await presenceChannel.track({ player_id: pid, ts: Date.now() });
+                  await presenceChannel.track({ player_id: livePid, ts: Date.now() });
                 } catch (e) {
                   console.warn('KEEP-ALIVE: track() failed.');
                 }
@@ -337,7 +374,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
     return () => {
       if (presenceCleanupInterval) window.clearInterval(presenceCleanupInterval);
-      if (keepAliveInterval) window.clearInterval(keepAliveInterval);
+      // Absolute clear: even if the interval already self-cleared (keepAliveInterval = null),
+      // clearInterval(null) is a no-op in all browsers, so this is always safe.
+      if (keepAliveInterval !== null) window.clearInterval(keepAliveInterval);
+      keepAliveInterval = null;
       if (fallbackInterval) window.clearInterval(fallbackInterval);
       if (presenceChannel) supabase.removeChannel(presenceChannel);
       // FIX 4: Only remove the main channel if it successfully opened.
@@ -347,7 +387,15 @@ export function GameProvider({ children }: { children: ReactNode }) {
     };
     // ── studentData is intentionally NOT in deps — it's read via studentDataRef
     //    to avoid rebuilding channels (and wiping player state) on auth updates. ──
-  }, [activeRoomId, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+    // PATCH 3: Removed `user?.id` from deps. It caused `setupRoom()` to fire TWICE:
+    // once with `undefined` (initial auth load) and again when the user resolved.
+    // This created a second channel on the same room topic, causing:
+    //   - Duplicated event handlers processing the same DB events.
+    //   - The second `setupRoom` calling `rooms` SELECT before the user was set,
+    //     hitting the `!roomRes.data` guard and bouncing the admin to /dashboard.
+    // `userIdRef` is already kept in sync via its own useEffect, so the callbacks
+    // inside the channel always read the current value without this dep.
+  }, [activeRoomId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <GameContext.Provider value={{ room, players, gameState, serverTimeOffset, loading, joinRoom, setActiveRoomId, refreshPlayers }}>

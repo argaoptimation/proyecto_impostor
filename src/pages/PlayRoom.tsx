@@ -213,22 +213,26 @@ export default function PlayRoom() {
   //  2. Skip if still loading — prevents a false positive on initial mount.
   //  3. Skip if no session — nothing to purge.
   //  4. Skip if players list is empty — transient state, not a confirmed deletion.
+  // ZOMBIE DETECTOR REVISADO (Evita falsos positivos en la carga inicial)
   useEffect(() => {
-    if (isTeacher) return;
-    if (loading) return;
-    if (!studentData?.playerId && !studentData?.nickname) return;
-    if (players.length === 0) return; // transient: wait for real data
+    if (isTeacher || loading) return;
 
+    // Si no hay datos locales, no hay nada que evaluar
+    if (!studentData?.playerId && !studentData?.nickname) return;
+
+    // Si la lista de jugadores está vacía, asumimos que todavía se está descargando de Supabase
+    if (!players || players.length === 0) return;
+
+    // Buscamos si el jugador está en la lista actual
     const isStillInRoom = players.some(p =>
       p.id === studentData?.playerId || p.nickname === studentData?.nickname
     );
 
     if (isStillInRoom) {
+      // Confirmamos que existe en la DB. A partir de ahora, si desaparece, es un zombie real.
       hasBeenSeen.current = true;
-      return;
-    }
-
-    if (hasBeenSeen.current) {
+    } else if (hasBeenSeen.current) {
+      // Solo lo pateamos si ANTES lo habíamos visto y AHORA desapareció.
       console.warn(
         `[ZOMBIE DETECTOR] Player "${studentData?.nickname}" (${studentData?.playerId}) ` +
         `was confirmed in room but is now gone. Auto-purging ghost session.`
@@ -265,81 +269,76 @@ export default function PlayRoom() {
   useEffect(() => {
     if (!gameState || !room) return;
 
-    // AGREGAMOS 'ROLE_REVEAL' AL CANDADO:
-    // No queremos que el sistema de aborto automático actúe mientras se revelan roles
     if (gameState.phase === 'LOBBY' || gameState.phase === 'RESULTS' || gameState.phase === 'ROLE_REVEAL') {
       isAbortingRef.current = false;
       return;
     }
 
+    // 1. CONDICIÓN SUPREMA: Faltan jugadores físicos (Alguien cerró la pestaña o fue Kickeado)
+    if (activePlayers.length < 3) {
+      if (!isAbortingRef.current) {
+        isAbortingRef.current = true;
+        if (isTeacher) {
+          console.warn('📝 DB WRITE - LOBBY (Abortando: Quórum físico perdido, menos de 3 en la sala)');
+          sessionStorage.setItem('lobby_error', 'MISSION ABORTED: INSUFFICIENT PLAYERS CONNECTED');
+
+          supabase.from('game_state').update({
+            phase: 'LOBBY',
+            current_turn_index: 0,
+            current_turn_player_id: null,
+            turn_started_at: null,
+            is_paused: false,
+            secret_word: null
+          }).eq('room_id', room.id).then();
+
+          activePlayers.forEach(p =>
+            supabase.from('players').update({ is_eliminated: false, turn_order: null }).eq('id', p.id).then()
+          );
+        }
+      }
+      return; // Detiene la ejecución. Nunca evalúa si alguien ganó.
+    }
+
+    // 2. EL IMPOSTOR SE FUE O FUE KICKEADO
+    const totalImpostorsInRoom = activePlayers.filter(p => p.role === 'IMPOSTOR').length;
+    if (totalImpostorsInRoom === 0) {
+      if (!isAbortingRef.current) {
+        isAbortingRef.current = true;
+        if (isTeacher) {
+          console.warn('📝 DB WRITE - LOBBY (Impostor abandonó/fue expulsado)');
+          sessionStorage.setItem('lobby_error', 'MISSION ABORTED: NO LIVING IMPOSTORS');
+
+          supabase.from('game_state').update({
+            phase: 'LOBBY',
+            current_turn_index: 0,
+            current_turn_player_id: null,
+            turn_started_at: null,
+            is_paused: false,
+            secret_word: null
+          }).eq('room_id', room.id).then();
+
+          activePlayers.forEach(p =>
+            supabase.from('players').update({ is_eliminated: false, turn_order: null }).eq('id', p.id).then()
+          );
+        }
+      }
+      return;
+    }
+
+    // 3. EVALUACIÓN NORMAL DE VICTORIA GLOBALES (Si están todos conectados)
     const alivePlayersList = activePlayers.filter(p => !p.is_eliminated);
     const aliveCount = alivePlayersList.length;
     if (aliveCount === 0) return;
 
+    const impostorsAlive = alivePlayersList.filter(p => p.role === 'IMPOSTOR').length;
+    const nativesAlive = aliveCount - impostorsAlive;
+
     if (!isAbortingRef.current) {
-      // 0. NUEVA CONDICIÓN: Verificar si los impostores salieron de la sala (Expulsión/Desconexión)
-      const totalImpostorsInRoom = activePlayers.filter(p => p.role === 'IMPOSTOR').length;
-
-      if (totalImpostorsInRoom === 0) {
-        isAbortingRef.current = true;
-        if (isTeacher) {
-          console.warn('📝 DB WRITE - Cambiando game_state a LOBBY (Impostor abandonó/fue expulsado)');
-          sessionStorage.setItem('lobby_error', 'MISSION ABORTED: NO LIVING IMPOSTORS');
-
-          // AGREGAMOS EL .then() PARA EJECUTAR LA QUERY
-          supabase.from('game_state').update({
-            phase: 'LOBBY',
-            current_turn_index: 0,
-            current_turn_player_id: null,
-            turn_started_at: null,
-            is_paused: false,
-            secret_word: null
-          }).eq('room_id', room.id).then();
-
-          activePlayers.forEach(p =>
-            // AGREGAMOS EL .then() PARA EJECUTAR LA QUERY
-            supabase.from('players').update({ is_eliminated: false, turn_order: null }).eq('id', p.id).then()
-          );
-        }
-        return;
-      }
-
-      // Si pasamos el filtro anterior, significa que los impostores siguen en la sala (vivos o muertos)
-      const impostorsAlive = alivePlayersList.filter(p => p.role === 'IMPOSTOR').length;
-      const nativesAlive = aliveCount - impostorsAlive;
-
-      // 1. Check Win Conditions first to avoid aborting a legitimate win
       if (impostorsAlive === 0 || nativesAlive <= impostorsAlive) {
         isAbortingRef.current = true;
         if (isTeacher) {
-          console.warn('📝 DB WRITE - Cambiando game_state a RESULTS (Victoria detectada globalmente)');
-          // AGREGAMOS EL .then() PARA EJECUTAR LA QUERY
+          console.warn('📝 DB WRITE - RESULTS (Victoria detectada globalmente)');
           supabase.from('game_state').update({ phase: 'RESULTS' }).eq('room_id', room.id).then();
-        }
-        return;
-      }
-
-      // 2. Abort to LOBBY rule: if alive players drop < 3 and NO ONE WON, abort.
-      if (aliveCount < 3) {
-        isAbortingRef.current = true;
-        if (isTeacher) {
-          console.warn('📝 DB WRITE - Cambiando game_state a LOBBY (Abortando por falta de jugadores vivos)');
-          sessionStorage.setItem('lobby_error', 'MISSION ABORTED: INSUFFICIENT PLAYERS ALIVE');
-
-          // AGREGAMOS EL .then() PARA EJECUTAR LA QUERY
-          supabase.from('game_state').update({
-            phase: 'LOBBY',
-            current_turn_index: 0,
-            current_turn_player_id: null,
-            turn_started_at: null,
-            is_paused: false,
-            secret_word: null
-          }).eq('room_id', room.id).then();
-
-          activePlayers.forEach(p =>
-            // AGREGAMOS EL .then() PARA EJECUTAR LA QUERY
-            supabase.from('players').update({ is_eliminated: false, turn_order: null }).eq('id', p.id).then()
-          );
         }
       }
     }
@@ -351,7 +350,7 @@ export default function PlayRoom() {
 
   if (loading || !room || !gameState) {
     return (
-      <div className="h-[100dvh] bg-[#050505] flex flex-col items-center justify-center p-8 overflow-x-hidden">
+      <div key="whapigen-system-loader" className="h-[100dvh] bg-[#050505] flex flex-col items-center justify-center p-8 overflow-x-hidden">
         <div className="absolute inset-0 z-0">
           <div className="particles-bg">
             {[...Array(10)].map((_, i) => (
@@ -387,9 +386,33 @@ export default function PlayRoom() {
 
   const handleLeave = async () => {
     if (isStudent && studentData?.playerId) {
-      await supabase.from('players').delete().eq('id', studentData.playerId);
-      setStudentData(null);
-      navigate('/join');
+      const pid = studentData.playerId;
+      try {
+        // 1. Emit broadcast FIRST so the admin receives the leave signal
+        //    while the student's WebSocket connection is still alive.
+        await supabase.channel(`room:${roomId}`).send({
+          type: 'broadcast',
+          event: 'PLAYER_LEFT',
+          payload: { playerId: pid },
+        });
+
+        // 2. Delete the player row and wait for confirmation.
+        //    The await ensures the HTTP request completes before we unmount.
+        await supabase.from('players').delete().eq('id', pid);
+
+        // 3. Safety delay: gives Supabase Realtime ~200ms to propagate the
+        //    DELETE event to other subscribers before navigation tears down
+        //    this client's WebSocket and React component tree.
+        await new Promise(r => setTimeout(r, 200));
+      } catch (e) {
+        // Non-fatal: log but continue — the player should still leave the room.
+        console.warn('LEAVE: Error during cleanup:', e);
+      } finally {
+        // 4. Clear local session and navigate regardless of network errors.
+        sessionStorage.clear();
+        setStudentData(null);
+        navigate('/join');
+      }
     } else if (isTeacher) {
       navigate('/admin/dashboard');
     }
@@ -427,19 +450,18 @@ export default function PlayRoom() {
       )}
 
       {/* Top Brand Navigation */}
-      <div className="w-full flex justify-between items-center p-1 relative md:absolute md:top-0 z-[60] pointer-events-none">
-
+      <div className="w-full flex justify-between items-center p-1 relative md:absolute mt-2 md:mt-2 left-2 z-[60] pointer-events-none">
         <button
           onClick={handleLeave}
-          className="pointer-events-auto flex items-center gap-2 text-gray-400 hover:text-white font-jetbrains text-[10px] uppercase tracking-[0.3em] transition-all bg-black/60 backdrop-blur-xl px-8 py-3 rounded-full border border-white/5 hover:border-purple-500/50 hover:shadow-neon-pulse-violet font-black"
+          className="pointer-events-auto flex items-center gap-2 text-gray-400 hover:text-white font-jetbrains text-[10px] uppercase tracking-[0.3em] transition-all bg-black/60 backdrop-blur-xl px-4 md:px-8 py-0.5 rounded-full border border-white/5 hover:border-purple-500/50 hover:shadow-neon-pulse-violet font-black"
         >
-          {isTeacher ? <><Home className="w-7 h-7 md:w-9 h-9" /> Dashboard</> : <><LogOut className="w-7 h-7 md:w-8 h-8 text-whapigen-red" /> Leave Mission</>}
+          {isTeacher ? <><Home className="w-6 h-6 md:w-9 h-9" /> Dashboard</> : <><LogOut className="w-6 h-6 md:w-8 h-8 text-whapigen-red" /> Leave Mission</>}
         </button>
       </div>
 
       {/* STUDENT IDENTITY LABEL */}
       {!isTeacher && studentData?.nickname && (
-        <div className="relative md:fixed md:bottom-8 md:left-8 z-50 pointer-events-none mt-4 md:mt-0 px-8 md:px-0">
+        <div className="relative md:fixed md:bottom-8 md:left-8 z-50 pointer-events-none mt-4 mb-2 md:mb-0 md:mt-0 px-8 md:px-0">
           <div className="bg-gradient-to-r from-whapigen-cyan/20 to-purple-600/20 backdrop-blur-2xl border border-white/10 px-6 py-3 rounded-full shadow-2xl flex items-center gap-3">
             <div className="w-2 h-2 rounded-full bg-whapigen-cyan animate-pulse shadow-[0_0_10px_#00f0ff]"></div>
             <span className="font-jetbrains text-xs tracking-[0.4em] text-white/70 font-black uppercase">
@@ -448,56 +470,57 @@ export default function PlayRoom() {
           </div>
         </div>
       )}
-      <header className="fixed top-16 md:top-6 left-1/2 -translate-x-1/2 w-[95%] md:w-[60%] z-[60] flex flex-col md:flex-row justify-between items-center p-2 md:p-4 bg-black/40 backdrop-blur-3xl rounded-3xl md:rounded-full border border-white/10 shadow-[0_20px_60px_rgba(0,0,0,0.5)] animate-in slide-in-from-top duration-700 gap-4 md:gap-0">
-        <div className="flex items-center gap-6">
-          <div className="hidden md:flex items-center gap-3">
-            <span className="text-header-premium text-lg font-black tracking-[0.2em] whitespace-nowrap">CIL LENGUAS</span>
-            <div className="w-1 h-6 bg-gradient-to-b from-whapigen-cyan to-purple-600 opacity-30"></div>
-          </div>
-          <div className="flex flex-col gap-2">
-            <h1 className="text-header-premium text-2xl tracking-[0.1em]">
-              {room.code}
-            </h1>
-
-            <div className="flex items-center gap-2 flex-wrap justify-center md:justify-start">
-              {/* BADGE DE NIVEL */}
-              <span className="bg-purple-900/40 backdrop-blur-xl border border-purple-500/30 text-gray-300 font-jetbrains text-xs px-3 py-1 rounded-full uppercase tracking-widest shadow-[0_0_15px_rgba(147,51,234,0.3)]">
-                LEVEL {room.level}
-              </span>
-
-              {/* BADGE DE TEMÁTICA (NUEVO) */}
-              {gameState?.theme && (
-                <span className="bg-whapigen-cyan/20 backdrop-blur-xl border border-whapigen-cyan/40 text-whapigen-cyan font-jetbrains text-[10px] px-3 py-1 rounded-full uppercase tracking-[0.2em] shadow-[0_0_15px_rgba(0,240,255,0.1)] font-black">
-                  THEME: {gameState.theme}
+      {/* HEADER PRINCIPAL: SOLO VISIBLE EN LOBBY */}
+      {gameState.phase === 'LOBBY' && (
+        <header className="fixed top-16 md:top-6 left-1/2 -translate-x-1/2 w-[95%] md:w-[60%] z-[60] flex flex-col md:flex-row justify-between items-center p-2 md:p-4 bg-black/40 backdrop-blur-3xl rounded-3xl md:rounded-full border border-white/10 shadow-[0_20px_60px_rgba(0,0,0,0.5)] animate-in slide-in-from-top duration-700 gap-4 md:gap-0">
+          <div className="flex items-center gap-6">
+            <div className="hidden md:flex items-center gap-3">
+              <span className="text-header-premium text-lg font-black tracking-[0.2em] whitespace-nowrap">CIL LENGUAS</span>
+              <div className="w-1 h-6 bg-gradient-to-b from-whapigen-cyan to-purple-600 opacity-30"></div>
+            </div>
+            <div className="flex flex-col gap-2">
+              <h1 className="text-header-premium text-2xl tracking-[0.1em]">
+                {room.code}
+              </h1>
+              <div className="flex items-center gap-2 flex-wrap justify-center md:justify-start">
+                {/* BADGE DE NIVEL */}
+                <span className="bg-purple-900/40 backdrop-blur-xl border border-purple-500/30 text-gray-300 font-jetbrains text-xs px-3 py-1 rounded-full uppercase tracking-widest shadow-[0_0_15px_rgba(147,51,234,0.3)]">
+                  LEVEL {room.level}
                 </span>
-              )}
 
-              {/* BADGE DE TURNOS */}
-              <span className="bg-cyan-900/40 backdrop-blur-xl border border-cyan-500/30 text-gray-300 font-jetbrains text-xs px-3 py-1 rounded-full uppercase tracking-widest shadow-[0_0_15px_rgba(0,240,255,0.2)]">
-                {room.turn_duration}S TURNS
-              </span>
+                {/* BADGE DE TEMÁTICA (NUEVO) */}
+                {gameState?.theme && (
+                  <span className="bg-whapigen-cyan/20 backdrop-blur-xl border border-whapigen-cyan/40 text-whapigen-cyan font-jetbrains text-[10px] px-3 py-1 rounded-full uppercase tracking-[0.2em] shadow-[0_0_15px_rgba(0,240,255,0.1)] font-black">
+                    THEME: {gameState.theme}
+                  </span>
+                )}
 
-              <button
-                onClick={() => setShowShareModal(true)}
-                className="flex items-center justify-center gap-2 px-3 py-1 bg-whapigen-cyan/10 border border-whapigen-cyan/40 text-whapigen-cyan hover:bg-whapigen-cyan hover:text-black rounded-full transition-all duration-300 shadow-[0_0_15px_rgba(0,240,255,0.1)] group whitespace-nowrap cursor-pointer"
-              >
-                <QrCode className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" />
-                <span className="font-jetbrains font-black text-[10px] tracking-[0.2em] uppercase mt-0.5">
-                  SHARE
+                {/* BADGE DE TURNOS */}
+                <span className="bg-cyan-900/40 backdrop-blur-xl border border-cyan-500/30 text-gray-300 font-jetbrains text-xs px-3 py-1 rounded-full uppercase tracking-widest shadow-[0_0_15px_rgba(0,240,255,0.2)]">
+                  {room.turn_duration}S TURNS
                 </span>
-              </button>
+                <button
+                  onClick={() => setShowShareModal(true)}
+                  className="flex items-center justify-center gap-2 px-3 py-1 bg-whapigen-cyan/10 border border-whapigen-cyan/40 text-whapigen-cyan hover:bg-whapigen-cyan hover:text-black rounded-full transition-all duration-300 shadow-[0_0_15px_rgba(0,240,255,0.1)] group whitespace-nowrap cursor-pointer"
+                >
+                  <QrCode className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" />
+                  <span className="font-jetbrains font-black text-[10px] tracking-[0.2em] uppercase mt-0.5">
+                    SHARE
+                  </span>
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-        <div className="flex flex-col items-center md:items-end w-full md:w-auto">
-          <span className="text-whapigen-cyan font-jetbrains text-[10px] tracking-[0.4em] border border-whapigen-cyan/30 bg-whapigen-cyan/10 px-4 py-1.5 rounded-full uppercase font-black animate-pulse shadow-neon-pulse-cyan text-center">
-            PHASE: {gameState.phase.replace('_', ' ')}
-          </span>
-          <span className="text-xs text-white/70 font-jetbrains tracking-[0.2em] mt-2 flex items-center gap-2 font-black justify-center md:justify-end w-full">
-            <Users className="w-3.5 h-3.5 text-whapigen-cyan/50" /> {activePlayers.length} PLAYERS
-          </span>
-        </div>
-      </header>
+          <div className="flex flex-col items-center md:items-end w-full md:w-auto">
+            <span className="text-whapigen-cyan font-jetbrains text-[10px] tracking-[0.4em] border border-whapigen-cyan/30 bg-whapigen-cyan/10 px-4 py-1.5 rounded-full uppercase font-black animate-pulse shadow-neon-pulse-cyan text-center">
+              PHASE: {gameState.phase.replace('_', ' ')}
+            </span>
+            <span className="text-xs text-white/70 font-jetbrains tracking-[0.2em] mt-2 flex items-center gap-2 font-black justify-center md:justify-end w-full">
+              <Users className="w-3.5 h-3.5 text-whapigen-cyan/50" /> {activePlayers.length} PLAYERS
+            </span>
+          </div>
+        </header>
+      )}
 
       {/* ABORT SYSTEM LISTENER — useEffect prevents repeated triggers on re-render */}
       {(() => {
@@ -512,30 +535,30 @@ export default function PlayRoom() {
           role={activePlayers.find(p => p.id === studentData?.playerId)?.role}
           secretWord={gameState.secret_word}
           hintsEnabled={!!room.hints_enabled}
-          hints={gameState.secret_hint ? [gameState.secret_hint, ''] : getHintsForWord(gameState.secret_word || '', room.level)}
-          phaseStartedAt={gameState.turn_started_at}
+          hints={getHintsForWord(gameState.secret_word || '', room.level)}
         />
       )}
 
       {isTeacher && (
-        /* Mantenemos tu posicionamiento intacto */
-        <div className="relative md:fixed md:top-[110px] left-0 right-0 md:left-8 md:right-8 z-[40] p-4 flex flex-col items-center justify-center mx-auto max-w-7xl px-4 md:px-10 mt-36 md:mt-0">
+        /* Mantenemos tu posicionamiento intacto. 
+           Si la fase no es LOBBY, subimos un poco la barra del coordinador en mobile */
+        <div className={`relative md:fixed left-0 right-0 md:left-8 md:right-8 z-[40] p-4 flex flex-col items-center justify-center mx-auto max-w-7xl px-4 md:px-10 ${gameState.phase === 'LOBBY' ? 'md:top-[110px] mt-36 md:mt-0' : 'md:top-[40px]'}`}>
 
-          {/* Contenedor interno con ancho completo y centrado */}
-          <div className="w-full flex flex-col md:flex-row items-center justify-center gap-4 md:gap-12 bg-black/20 md:bg-transparent backdrop-blur-sm md:backdrop-blur-none p-4 rounded-3xl">
+          {/* Contenedor interno: Bajamos gap-4 a gap-1 y p-4 a p-2 en mobile */}
+          <div className="w-full flex flex-col md:flex-row items-center justify-center gap-1 md:gap-12 bg-black/20 md:bg-transparent backdrop-blur-sm md:backdrop-blur-none p-2 md:p-4 rounded-3xl">
 
             {/* Etiqueta del Coordinador */}
-            <div className="flex items-center gap-3 font-jetbrains text-purple-300 font-black tracking-[0.4em] text-[10px] md:text-xs uppercase whitespace-nowrap">
+            <div className="flex items-center mb-2 gap-3 font-jetbrains text-purple-300 font-black tracking-[0.4em] text-[10px] md:text-xs uppercase whitespace-nowrap">
               <div className="w-2 h-2 rounded-full bg-purple-500 animate-pulse shadow-[0_0_10px_#9333ea]"></div>
               COORDINATOR OVERRIDE
             </div>
 
             {gameState.phase !== 'LOBBY' && (
               /* Grupo de Datos: Centrado en mobile, espaciado en desktop */
-              <div className="flex flex-col sm:flex-row items-center gap-6 md:gap-10 font-jetbrains text-[12px] md:text-[14px] tracking-[0.3em] font-black uppercase w-full md:w-auto justify-center">
+              <div className="flex flex-col sm:flex-row items-center gap-2 md:gap-10 font-jetbrains text-[12px] md:text-[14px] tracking-[0.3em] font-black uppercase w-full md:w-auto justify-center">
 
                 {/* WORD */}
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
                   <span className="text-white/40 text-[10px]">WORD:</span>
                   <span className="text-white bg-white/5 px-4 py-1 rounded-full border border-white/5 whitespace-nowrap">
                     {gameState.secret_word || '???'}
@@ -543,7 +566,7 @@ export default function PlayRoom() {
                 </div>
 
                 {/* IMPOSTORS */}
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
                   <span className="text-white/40 text-[10px]">IMPOSTORS:</span>
                   <div className="flex flex-wrap justify-center gap-2">
                     {activePlayers
@@ -563,7 +586,7 @@ export default function PlayRoom() {
                 {/* Botón de Aborto */}
                 <button
                   onClick={handleEndSession}
-                  className="bg-whapigen-red/20 hover:bg-whapigen-red text-whapigen-red hover:text-white px-6 py-2 rounded-full transition-all font-black text-[10px] border border-whapigen-red/30"
+                  className="bg-whapigen-red/20 hover:bg-whapigen-red text-whapigen-red hover:text-white px-4 py-2 rounded-full transition-all font-black text-[10px] border border-whapigen-red/30"
                 >
                   ABORT
                 </button>
@@ -573,7 +596,14 @@ export default function PlayRoom() {
         </div>
       )}
 
-      <main className={`flex-grow pb-32 px-4 md:px-8 flex flex-col items-center justify-start md:justify-center relative z-10 w-full transition-all ${isTeacher ? 'pt-46' : 'pt-28'} ${isTeacher ? 'md:pt-[80px]' : 'md:pt-[0px]'}`}>
+      {/* Ajuste Dinámico de Padding en el Main */}
+      <main className={`flex-grow pb-32 px-4 md:px-8 flex flex-col items-center relative z-10 w-full transition-all duration-500 
+  ${gameState.phase === 'LOBBY' ? (isTeacher ? 'justify-start' : 'justify-start md:justify-center') : 'justify-start'}
+  ${gameState.phase === 'LOBBY'
+          ? (isTeacher ? 'pt-0 md:pt-56' : 'pt-6 pb-8 md:pt-[0px]')
+          : (isTeacher ? 'pt-0 md:pt-30' : 'pt-0 md:pt-0')
+        }
+`}>
         {(() => {
           switch (gameState.phase) {
             case 'LOBBY': return <PhaseLobby isTeacher={isTeacher} roomId={roomId!} players={activePlayers} roomLevel={room.level} />;
@@ -587,7 +617,7 @@ export default function PlayRoom() {
         })()}
       </main>
 
-      <footer className="relative md:fixed md:bottom-2 left-0 right-0 z-50 flex flex-col items-center gap-4 md:transform md:translate-y-2 pointer-events-none mt-auto pb-8 md:pb-0">
+      <footer className="relative md:fixed md:bottom-2 left-0 right-0 z-50 flex flex-col items-center gap-4 md:transform md:translate-y-2 pointer-events-none mt-auto pb-4 md:pb-0">
         <p className="text-[10px] font-jetbrains text-white/70 tracking-[0.6em] uppercase font-black px-4 text-center">
           POWERED BY <span className="bg-gradient-to-r from-whapigen-cyan to-purple-500 bg-clip-text text-transparent italic">WHAPIGEN</span> // AI AUTOMATION SYSTEMS
         </p>
@@ -702,9 +732,36 @@ function PhaseLobby({ isTeacher, roomId, players, roomLevel }: { isTeacher: bool
     const candidates = livePlayers.filter(p => (history[p.id] || 0) < 2);
     const candidatePool = candidates.length >= impostorCount ? candidates : livePlayers;
 
-    // Shuffle candidates and pick impostors
-    const shuffledCandidates = [...candidatePool].sort(() => Math.random() - 0.5);
-    const impostorIds = new Set<string>(shuffledCandidates.slice(0, impostorCount).map(p => p.id));
+    // ── WEIGHTED LOTTERY: Impostor selection ──────────────────────────────────
+    // Frecuencia de impostores
+    // FIRST_PLAYER_IMPOSTOR_WEIGHT controls how likely index-0 of the DB result
+    // is to become impostor relative to everyone else:
+    //   1.0 → same odds as any other player (normal)
+    //   0.5 → half the odds (reduced bias fix)
+    //   0.0 → impossible to be impostor
+    const FIRST_PLAYER_IMPOSTOR_WEIGHT = 0.5;
+
+    // Weighted random draw (cumulative CDF approach — unbiased):
+    const weights = candidatePool.map((_, idx) => idx === 0 ? FIRST_PLAYER_IMPOSTOR_WEIGHT : 1);
+    const totalWeight = weights.reduce((a, b) => a + b, 0);
+
+    const impostorIds = new Set<string>();
+    const remaining = [...candidatePool]; // mutable pool so we don't pick the same player twice
+    const remainingWeights = [...weights];
+
+    for (let pick = 0; pick < impostorCount; pick++) {
+      const total = remainingWeights.reduce((a, b) => a + b, 0);
+      let rand = Math.random() * total;
+      let chosen = 0;
+      for (let i = 0; i < remaining.length; i++) {
+        rand -= remainingWeights[i];
+        if (rand <= 0) { chosen = i; break; }
+      }
+      impostorIds.add(remaining[chosen].id);
+      remaining.splice(chosen, 1);
+      remainingWeights.splice(chosen, 1);
+    }
+    console.log(`[Role Allocator] FIRST_PLAYER_IMPOSTOR_WEIGHT=${FIRST_PLAYER_IMPOSTOR_WEIGHT}, totalWeight=${totalWeight.toFixed(2)}, impostors:`, [...impostorIds]);
 
     // Update history: +1 for impostors, reset to 0 for natives
     const newHistory: Record<string, number> = {};
@@ -770,7 +827,14 @@ function PhaseLobby({ isTeacher, roomId, players, roomLevel }: { isTeacher: bool
       .eq('id', roomId);
 
     // ── DISTRIBUTE ROLES AND INITIAL TURN ORDER ──
-    const shuffledForOrder = [...livePlayers].sort(() => Math.random() - 0.5);
+    // Fisher-Yates shuffle: guarantees a perfectly uniform distribution.
+    // `.sort(() => Math.random() - 0.5)` is NOT uniform — each element's
+    // final position depends on how many comparisons it wins, which varies.
+    const shuffledForOrder = [...livePlayers];
+    for (let i = shuffledForOrder.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffledForOrder[i], shuffledForOrder[j]] = [shuffledForOrder[j], shuffledForOrder[i]];
+    }
     const turnOrderMap = new Map(shuffledForOrder.map((p, i) => [p.id, i]));
 
     const roleUpdates = livePlayers.map(p => {
@@ -806,11 +870,11 @@ function PhaseLobby({ isTeacher, roomId, players, roomLevel }: { isTeacher: bool
   const [showBriefing, setShowBriefing] = useState(false);
 
   return (
-    <div className="relative z-40 md:z-auto w-full max-w-2xl text-center space-y-8 pt-28 md:pt-56 animate-in fade-in duration-500">
+    <div className={`relative z-40 md:z-auto w-full max-w-2xl text-center space-y-4 animate-in fade-in duration-500 ${isTeacher ? 'pt-4 md:pt-0' : 'pt-32 md:pt-0'}`}>
 
       <div className="mb-8 relative">
         <Target className="w-24 h-24 mx-auto text-whapigen-cyan/20 absolute -top-4 left-1/2 -translate-x-1/2 -rotate-45" />
-        <h2 className="text-4xl md:text-5xl font-sora font-extrabold text-white uppercase tracking-tight relative z-10">
+        <h2 className="text-2xl md:text-5xl font-sora font-extrabold text-white uppercase tracking-tight relative z-10">
           Waiting for
           <br />
           <span className="text-transparent bg-clip-text bg-gradient-to-r from-whapigen-cyan to-purple-400 drop-shadow-[0_0_15px_rgba(0,240,255,0.4)]">
@@ -826,7 +890,7 @@ function PhaseLobby({ isTeacher, roomId, players, roomLevel }: { isTeacher: bool
         </button>
       </div>
 
-      <div className="relative z-[1] pointer-events-auto bg-black/95 backdrop-blur-xl border border-white/5 p-12 min-h-[300px] w-full max-w-4xl flex flex-wrap gap-4 items-center justify-center rounded-[40px] shadow-[0_30px_100px_rgba(0,0,0,0.8)] overflow-x-hidden">
+      <div className="relative z-[1] pointer-events-auto bg-black/95 backdrop-blur-xl border border-white/10 p-6 min-h-[80px] w-full max-w-4xl flex flex-wrap gap-4 items-center justify-center rounded-[40px] shadow-[0_30px_100px_rgba(0,0,0,0.8)] overflow-x-hidden">
         <div className="particles-bg opacity-30">
           {[...Array(15)].map((_, i) => (
             <div
@@ -850,7 +914,7 @@ function PhaseLobby({ isTeacher, roomId, players, roomLevel }: { isTeacher: bool
           </div>
         ) : (
           [...players].sort((a, b) => a.nickname.localeCompare(b.nickname)).map(p => (
-            <div key={p.id} className="bg-black/40 backdrop-blur-xl border border-white/10 text-white px-6 py-3 flex items-center gap-4 font-jetbrains text-xs tracking-[0.2em] rounded-full animate-in zoom-in-50 duration-500 group shadow-lg hover:shadow-neon-pulse-cyan hover:border-whapigen-cyan/30 transition-all font-black" style={{ transform: 'translateZ(0)' }}>
+            <div key={p.id} className={`text-[10px] flex items-center gap-1.5 md:gap-2 px-3 py-1.5 md:px-4 md:py-2 font-jetbrains rounded-full transition-all shadow-xl font-bold uppercase tracking-[0.2em] relative group/kick backdrop-blur-xl ${p.is_eliminated ? 'bg-black/20 text-white/10 grayscale opacity-40' : 'bg-white/5 border border-white/5 text-white hover:border-purple-500/30 hover:shadow-neon-pulse-violet'}`} style={{ transform: 'translateZ(0)' }}>
               <div className="w-3 h-3 rounded-full bg-whapigen-cyan animate-pulse shadow-neon-pulse-cyan"></div>
               {p.nickname}
               {isTeacher && (
@@ -1006,12 +1070,14 @@ function PhaseLobby({ isTeacher, roomId, players, roomLevel }: { isTeacher: bool
 // ---------------- ROLE REVEAL PHASE ----------------
 function PhaseReveal({ isTeacher, roomId, players }: { isTeacher: boolean, roomId: string, players: any[] }) {
   const [revealed, setRevealed] = useState(false);
-  const { gameState } = useGame();
+  const { gameState, room } = useGame();
   const { studentData } = useAuth();
 
   const currentPlayer = players.find(p => p.id === studentData?.playerId);
   const role = currentPlayer?.role;
   const secretWord = gameState?.secret_word;
+  const hintsEnabled = !!room?.hints_enabled;
+  const hints = hintsEnabled && secretWord ? getHintsForWord(secretWord, room.level) : null;
 
   const beginSpeaking = async () => {
     try {
@@ -1066,13 +1132,13 @@ function PhaseReveal({ isTeacher, roomId, players }: { isTeacher: boolean, roomI
 
   if (isTeacher) {
     return (
-      <div className="text-center font-jetbrains w-full max-w-md space-y-8 animate-in slide-in-from-bottom-4 pt-[140px]">
+      <div className="text-center font-jetbrains w-full max-w-md space-y-4 animate-in slide-in-from-bottom-4 md:pt-32">
         <h2 className="text-2xl font-sora font-bold text-white uppercase text-whapigen-cyan drop-shadow-neon-cyan mb-8">ROLE DISTRIBUTED</h2>
-        <div className="bg-white/[0.03] backdrop-blur-xl border border-white/10 rounded-[40px] text-center p-20 shadow-2xl w-full max-w-lg group">
-          <div className="mb-10 p-5 rounded-full bg-white/5 inline-block group-hover:bg-whapigen-cyan/10 transition-colors">
+        <div className="bg-white/[0.03] backdrop-blur-xl border border-white/10 rounded-[40px] text-center p-6 shadow-2xl w-full max-w-lg group">
+          <div className="mb-6 p-5 rounded-full bg-white/5 inline-block group-hover:bg-whapigen-cyan/10 transition-colors">
             <Loader2 className="w-10 h-10 text-whapigen-cyan animate-spin" />
           </div>
-          <p className="text-white text-xs font-jetbrains font-black tracking-[0.5em] mb-12 uppercase animate-pulse">AWAITING CONFIRMATION...</p>
+          <p className="text-white text-xs font-jetbrains font-black tracking-[0.5em] mb-6 uppercase animate-pulse">AWAITING CONFIRMATION...</p>
           <button
             onClick={beginSpeaking}
             className="w-full h-20 bg-gradient-to-r from-whapigen-cyan to-purple-600 text-black hover:scale-105 active:scale-95 font-sora font-black tracking-[0.3em] transition-all rounded-full uppercase shadow-2xl ring-2 ring-white/10"
@@ -1089,7 +1155,7 @@ function PhaseReveal({ isTeacher, roomId, players }: { isTeacher: boolean, roomI
       <h2 className="text-3xl font-sora font-extrabold text-white uppercase tracking-wider shadow-md">TOP SECRET DATA</h2>
 
       <div
-        className={`bg-black/60 backdrop-blur-xl p-8 md:p-16 transition-all duration-700 relative cursor-pointer group select-none overflow-x-hidden rounded-[40px] border shadow-[0_30px_50px_rgba(0,0,0,0.5)] flex items-center justify-center min-h-[200px] md:min-h-[250px] w-full z-50 animate-pulse-slow ${revealed ? 'border-whapigen-cyan shadow-neon-pulse-cyan' : 'border-white/5 hover:border-purple-500/30 shadow-neon-pulse-violet'}`}
+        className={`bg-black/60 backdrop-blur-xl p-8 md:p-16 transition-all duration-700 relative cursor-pointer group select-none overflow-x-hidden rounded-[40px] border shadow-[0_30px_50px_rgba(0,0,0,0.5)] flex items-center justify-center min-h-[200px] md:min-h-[250px] w-full z-50 animate-pulse-slow ${revealed ? 'border-whapigen-cyan shadow-neon-pulse-cyan' : 'border-white/25 hover:border-purple-500/30 shadow-neon-pulse-violet'}`}
         onClick={() => setRevealed(prev => !prev)}
       >
         <div className="absolute inset-0 bg-digital-grid bg-[length:60px_60px] opacity-[0.03] pointer-events-none"></div>
@@ -1124,6 +1190,20 @@ function PhaseReveal({ isTeacher, roomId, players }: { isTeacher: boolean, roomI
                 </h1>
               </div>
             </div>
+
+            {role === 'IMPOSTOR' && hints && (
+              <>
+                <div className="w-full h-px bg-gradient-to-r from-transparent via-white/10 to-transparent my-4"></div>
+                <div className="flex flex-col items-center gap-2 w-full">
+                  <span className="text-purple-400 font-jetbrains text-sm tracking-[0.8em] font-black uppercase mb-4 ml-[0.8em]">HINT</span>
+                  <div className="flex items-center justify-center w-full min-w-0">
+                    <h1 className="text-white font-sora font-black uppercase tracking-tighter leading-none text-center drop-shadow-neon-violet break-words overflow-visible text-[clamp(1.2rem,8vw,2.5rem)] md:text-[clamp(1.5rem,5vw,2.5rem)]">
+                      {hints[0]}
+                    </h1>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -1151,14 +1231,19 @@ function PhaseSpeaking({ isTeacher, room, gameState, players }: { isTeacher: boo
   const pausedTimeRef = useRef(room.turn_duration);
 
   // Derive absolute time
-  let rawTimeLeftMs = room.turn_duration * 1000;
+  // ── FIX NaN: Aseguramos que haya un número válido siempre ──
+  const safeTurnDuration = room?.turn_duration || 30;
+  let rawTimeLeftMs = safeTurnDuration * 1000;
+
   if (gameState.turn_started_at) {
     const startedAt = new Date(gameState.turn_started_at).getTime();
-    const nowWithOffset = Date.now() + (serverTimeOffset || 0);
-    const elapsedMs = nowWithOffset - startedAt;
-    rawTimeLeftMs = (room.turn_duration * 1000) - elapsedMs;
+    if (!isNaN(startedAt)) {
+      const nowWithOffset = Date.now() + (serverTimeOffset || 0);
+      const elapsedMs = nowWithOffset - startedAt;
+      rawTimeLeftMs = (safeTurnDuration * 1000) - elapsedMs;
+    }
   }
-  let actualTimeLeft = Math.max(0, Math.floor(rawTimeLeftMs / 1000));
+  let actualTimeLeft = Math.max(0, Math.floor((rawTimeLeftMs || 0) / 1000));
 
   if (!gameState.is_paused) {
     pausedTimeRef.current = actualTimeLeft;
@@ -1172,10 +1257,13 @@ function PhaseSpeaking({ isTeacher, room, gameState, players }: { isTeacher: boo
   }, [gameState.is_paused]);
 
   useEffect(() => {
-    if (actualTimeLeft <= 0 && isTeacher && !gameState.is_paused) {
+    // GUARD: only fire when the game is actively in SPEAKING_TURNS and time has expired.
+    // Without this, a stale effect re-run after a phase change would call handleNextTurn
+    // on a phase that no longer needs it, causing ghost DB writes.
+    if (actualTimeLeft <= 0 && isTeacher && !gameState.is_paused && gameState.phase === 'SPEAKING_TURNS') {
       handleNextTurn();
     }
-  }, [actualTimeLeft, isTeacher, gameState.is_paused]);
+  }, [actualTimeLeft, isTeacher, gameState.is_paused, gameState.phase]);
 
   // Initial GSAP setup
   useEffect(() => {
@@ -1236,14 +1324,52 @@ function PhaseSpeaking({ isTeacher, room, gameState, players }: { isTeacher: boo
     return () => { if (tlRef.current) tlRef.current.kill(); };
   }, [gameState.is_paused]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Stable primitive dep: only changes when the actual SET of player IDs changes,
+  // not on every .filter() call that would generate a new array reference on each render.
+  const playerIdsString = players.map((p: any) => p.id).sort().join(',');
+
+  // ── DISCONNECT DETECTOR: saltar turno si el jugador activo abandona ──
+  useEffect(() => {
+    if (!isTeacher) return;
+    if (gameState.phase !== 'SPEAKING_TURNS') return;
+    if (!gameState.current_turn_player_id) return;
+
+    // Fast path: if the active player is still in the local list, nothing to do.
+    const inLocalList = players.some((p: any) => p.id === gameState.current_turn_player_id);
+    if (inLocalList) return;
+
+    // Player is missing from local state. Confirm with DB before acting
+    // to avoid a false-positive on a transient render where props lag behind.
+    let cancelled = false;
+    supabase
+      .from('players')
+      .select('id')
+      .eq('id', gameState.current_turn_player_id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (cancelled) return;
+        if (!data) {
+          // Confirmed gone from DB — safe to advance the turn.
+          console.warn('🚨 DISCONNECT DETECTOR: jugador confirmado ausente en DB. Saltando turno...');
+          handleNextTurn();
+        }
+      });
+
+    return () => { cancelled = true; };
+    // playerIdsString fires when the player list actually changes (deletion/addition).
+    // gameState.current_turn_player_id fires when the active turn changes.
+    // Together they cover every scenario without the 500ms timer-tick noise.
+  }, [playerIdsString, gameState.current_turn_player_id, gameState.phase, isTeacher]); // eslint-disable-line react-hooks/exhaustive-deps
+
+
   const handleNextTurn = async () => {
     const hasImpostors = players.some((p: any) => p.role === 'IMPOSTOR' && !p.is_host);
     const validPlayersCount = players.filter((p: any) => !p.is_host && !p.is_eliminated).length;
 
-    // CANDADO ABSOLUTO
-    if (gameState.phase === 'LOBBY' || validPlayersCount < 3 || !hasImpostors) {
+    // CANDADO ABSOLUTO: no escribir si el quórum mínimo ya no se cumple
+    if (validPlayersCount < 3 || !hasImpostors) {
       console.warn('⛔ handleNextTurn BLOQUEADO: Faltan jugadores o el Impostor abandonó la sala.');
-      return; // <--- ESTO ES LO QUE FALTABA PARA FRENAR LA EJECUCIÓN
+      return;
     }
 
     const nextCandidates = players
@@ -1283,23 +1409,66 @@ function PhaseSpeaking({ isTeacher, room, gameState, players }: { isTeacher: boo
   };
 
   return (
-    <div className="flex flex-col items-center justify-center gap-2 w-full pt-2 md:pt-40 animate-in zoom-in-95 duration-500 min-h-[70vh]">
-      <div className="text-center space-y-2 px-4">
-        <h3 className="text-whapigen-cyan font-jetbrains tracking-[0.3em] text-xs md:text-sm uppercase">
-          {currentPlayer?.id === studentData?.playerId ? (
-            <span key="your-turn" className="animate-pulse shadow-neon-pulse-cyan px-4 py-1 rounded-full border border-whapigen-cyan/30">YOUR TURN TO OPERATE</span>
-          ) : (
-            <span key="waiting-for" className="text-white/70">{`WAITING FOR ${currentPlayer?.nickname || '...'}`}</span>
-          )}
-        </h3>
-        <h2 className={`text-4xl md:text-6xl font-sora font-bold text-white uppercase transition-all duration-500 flex items-center justify-center gap-4 ${currentPlayer?.id === studentData?.playerId ? 'border-neon-active p-8 rounded-[40px] bg-whapigen-cyan/5 scale-95' : 'drop-shadow-neon-cyan opacity-80'}`}>
-          {currentPlayer?.id === studentData?.playerId ? <span key="arrow-left" className="arrow-indicator">{">>"}</span> : null}
-          <span key="player-name">{currentPlayer?.nickname || 'UNKNOWN'}</span>
-          {currentPlayer?.id === studentData?.playerId ? <span key="arrow-right" className="arrow-indicator">{"<<"}</span> : null}
-        </h2>
-      </div>
+    <div className="flex flex-col items-center justify-center gap-2 w-full md:pt-48 animate-in zoom-in-95 duration-500 min-h-[50vh]">
 
-      <div className="relative w-64 h-64 flex items-center justify-center">
+      {/* ── GHOST PLAYER STATE ── shown when active player left mid-turn */}
+      {(() => {
+        const isCurrentPlayerMissing = !players.some((p: any) => p.id === gameState.current_turn_player_id);
+
+        if (isCurrentPlayerMissing) {
+          return (
+            <div className="text-center space-y-3 px-4 animate-in fade-in duration-300">
+              {isTeacher ? (
+                // Admin: llamativo, con instrucción de acción clara
+                <div className="flex flex-col items-center gap-4">
+                  <div className="bg-whapigen-red/10 border border-whapigen-red/40 rounded-[20px] px-6 py-4 max-w-sm animate-pulse">
+                    <p className="text-whapigen-red font-jetbrains font-black text-[11px] tracking-[0.3em] uppercase text-center leading-relaxed">
+                      🚨 EL JUGADOR ABANDONÓ LA MISIÓN
+                    </p>
+                    <p className="text-whapigen-red/70 font-jetbrains text-[10px] tracking-[0.2em] uppercase text-center mt-2">
+                      PRESIONA FORCE SKIP PARA CONTINUAR
+                    </p>
+                  </div>
+                  <h2 className="text-3xl md:text-5xl font-sora font-bold text-whapigen-red/40 uppercase p-8">
+                    — — —
+                  </h2>
+                </div>
+              ) : (
+                // Alumnos: mensaje tranquilo, sin alarmar
+                <div className="flex flex-col items-center gap-4">
+                  <h3 className="text-white/40 font-jetbrains tracking-[0.2em] pt-4 text-xs md:text-sm uppercase">
+                    <span className="px-4 py-1">⚠️ JUGADOR DESCONECTADO</span>
+                  </h3>
+                  <h2 className="text-xl md:text-3xl font-sora font-bold text-white/30 uppercase p-8">
+                    Esperando al Coordinador...
+                  </h2>
+                </div>
+              )}
+            </div>
+          );
+        }
+
+        // ── Normal render when active player exists ──
+        return (
+          <div className="text-center space-y-2 px-4">
+            <h3 className="text-whapigen-cyan font-jetbrains tracking-[0.2em] pt-0 md:pt-4 text-xs md:text-sm uppercase">
+              {currentPlayer && studentData?.playerId && currentPlayer.id === studentData.playerId ? (
+                <span key="your-turn" className="animate-pulse shadow-neon-pulse-cyan px-4 py-1 rounded-full border border-whapigen-cyan/30">YOUR TURN TO OPERATE</span>
+              ) : (
+                <span key="waiting-for" className="text-white/70">{`WAITING FOR ${currentPlayer?.nickname || '...'}`}</span>
+              )}
+            </h3>
+            <h2 className={`text-3xl md:text-6xl font-sora font-bold text-white uppercase flex items-center justify-center gap-2 ${currentPlayer && studentData?.playerId && currentPlayer.id === studentData.playerId ? 'border-neon-active p-8 rounded-[40px] bg-whapigen-cyan/5' : 'border-4 border-transparent p-8 drop-shadow-neon-cyan opacity-80'}`}>
+              <span key="arrow-left" className={`arrow-indicator ${currentPlayer && studentData?.playerId && currentPlayer.id === studentData.playerId ? 'opacity-100' : 'opacity-0 invisible'}`}>{">>"}</span>
+              <span key="player-name">{currentPlayer?.nickname || '...'}</span>
+              <span key="arrow-right" className={`arrow-indicator ${currentPlayer && studentData?.playerId && currentPlayer.id === studentData.playerId ? 'opacity-100' : 'opacity-0 invisible'}`}>{"<<"}</span>
+            </h2>
+          </div>
+        );
+      })()}
+
+
+      <div className="relative w-48 h-48 md:w-64 md:h-64 flex items-center justify-center">
         {/* Glow behind :Degradado radial nativo para evitar el corte cuadrado */}
         <div className="absolute -inset-24 bg-[radial-gradient(circle,rgba(0,240,255,0.25)_0%,transparent_60%)] pointer-events-none"></div>
         <svg className="absolute w-full h-full -rotate-90 overflow-visible" viewBox="0 0 100 100">
@@ -1334,27 +1503,31 @@ function PhaseSpeaking({ isTeacher, room, gameState, players }: { isTeacher: boo
       )}
 
       {isTeacher && (
-        <div className="flex flex-col items-center gap-4 md:gap-10 mt-8 w-full">
-          <div className="flex gap-8">
+        <div className="flex flex-col items-center gap-6 mt-8 w-full md:w-[80%] mx-auto">
+          {/* BOTONES DE CONTROL */}
+          <div className="flex gap-3 md:gap-6">
             <button
               onClick={togglePause}
-              className={`px-16 py-5 rounded-full font-sora text-[10px] tracking-[0.3em] font-black transition-all uppercase shadow-lg ${gameState.is_paused ? 'bg-gradient-to-r from-green-400 to-green-600 text-black shadow-[0_15px_40px_rgba(34,197,94,0.3)] hover:scale-105' : 'bg-white/5 border border-white/10 text-whapigen-cyan hover:bg-whapigen-cyan hover:text-black hover:shadow-neon-cyan/50'}`}
+              className={`px-6 py-4 rounded-full font-sora text-[10px] tracking-[0.3em] font-black transition-all uppercase shadow-lg ${gameState.is_paused ? 'bg-gradient-to-r from-green-400 to-green-600 text-black shadow-[0_15px_40px_rgba(34,197,94,0.3)] hover:scale-105' : 'bg-white/5 border border-white/10 text-whapigen-cyan hover:bg-whapigen-cyan hover:text-black hover:shadow-neon-cyan/50'}`}
             >
               <span style={{ pointerEvents: 'none' }}>{gameState.is_paused ? 'Resume Mission' : 'Pause'}</span>
             </button>
             <button
               onClick={handleNextTurn}
-              className="bg-whapigen-red/10 border border-whapigen-red/30 text-whapigen-red hover:bg-whapigen-red hover:text-white px-16 py-5 rounded-full font-sora text-[10px] tracking-[0.3em] font-black transition-all uppercase shadow-lg hover:shadow-neon-red/40"
+              className="bg-whapigen-red/10 border border-whapigen-red/30 text-whapigen-red hover:bg-whapigen-red hover:text-white px-6 py-4 rounded-full font-sora text-[10px] tracking-[0.3em] font-black transition-all uppercase shadow-lg hover:shadow-neon-red/40"
             >
               Force Skip
             </button>
           </div>
 
-          <div className="relative z-[1] pointer-events-auto flex flex-wrap gap-4 justify-center max-w-4xl px-12 animate-in fade-in border-t border-white/5 pt-16 w-full mt-8 mb-20">
+          {/* LISTA DE JUGADORES AJUSTADA PARA 2 POR FILA EN MOBILE */}
+          <div className="relative z-[1] pointer-events-auto grid grid-cols-2 md:flex md:flex-wrap gap-2 md:gap-4 justify-items-center md:justify-center max-w-4xl px-2 md:px-8 animate-in fade-in border-t border-white/5 pt-0 md:pt-16 w-full mt-0 mb-0">
             {[...players].filter((p: any) => !p.is_host).sort((a: any, b: any) => a.nickname.localeCompare(b.nickname)).map((p: any) => (
-              <div key={p.id} className={`text-[10px] flex items-center gap-4 px-6 py-3 font-jetbrains rounded-full transition-all shadow-xl font-bold uppercase tracking-[0.2em] relative group/kick backdrop-blur-xl ${p.is_eliminated ? 'bg-black/20 text-white/10 grayscale opacity-40' : 'bg-white/5 border border-white/5 text-purple-400/80 hover:border-purple-500/30 hover:shadow-neon-pulse-violet'}`} style={{ transform: 'translateZ(0)' }}>
-                <div className={`w-2 h-2 rounded-full ${p.is_eliminated ? 'bg-gray-800' : 'bg-purple-500 shadow-neon-pulse-violet'}`}></div>
-                <span className={p.is_eliminated ? 'line-through' : ''}>{p.nickname}</span>
+              <div key={p.id} className={`text-[10px] flex items-center justify-between gap-1.5 px-3 py-2 w-full md:w-auto font-jetbrains rounded-full transition-all shadow-xl font-bold uppercase tracking-[0.1em] md:tracking-[0.2em] relative group/kick backdrop-blur-xl ${p.is_eliminated ? 'bg-black/20 text-white/10 grayscale opacity-40' : 'bg-white/5 border border-white/5 text-white hover:border-purple-500/30 hover:shadow-neon-pulse-violet'}`} style={{ transform: 'translateZ(0)' }}>
+                <div className="flex items-center gap-1.5 truncate">
+                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${p.is_eliminated ? 'bg-gray-800' : 'bg-purple-500 shadow-neon-pulse-violet'}`}></div>
+                  <span className={`truncate ${p.is_eliminated ? 'line-through' : ''}`}>{p.nickname}</span>
+                </div>
                 {!p.is_eliminated && (
                   <button
                     onClick={async (e) => {
@@ -1364,29 +1537,27 @@ function PhaseSpeaking({ isTeacher, room, gameState, players }: { isTeacher: boo
                       console.log('🛑 KICK INTENT:', p.id);
                       await supabase.from('players').delete().eq('id', p.id);
 
-                      // Send explicit broadcast to stop auto-rejoin
                       const ch = supabase.channel(`kick:${p.id}:${Date.now()}`);
                       ch.subscribe((status) => {
                         if (status === 'SUBSCRIBED') {
                           ch.send({ type: 'broadcast', event: 'KICK_ABS', payload: { target: p.id } })
                             .then(() => {
                               supabase.removeChannel(ch);
-                              refreshPlayers(); // Update Admin UI immediately
+                              refreshPlayers();
                             });
                         }
                       });
                     }}
-                    className="relative z-[9999] pointer-events-auto cursor-pointer text-whapigen-red/30 hover:text-whapigen-red hover:scale-125 transition-all ml-2 p-1 bg-white/5 rounded-full border border-white/5 shadow-neon-pulse-red"
+                    className="relative z-[9999] pointer-events-auto cursor-pointer text-whapigen-red/30 hover:text-whapigen-red hover:scale-125 transition-all ml-1 p-1 bg-white/5 rounded-full border border-white/5 shadow-neon-pulse-red flex-shrink-0"
                     title="Kick Player"
                   >
-                    <X className="w-3.5 h-3.5" style={{ pointerEvents: 'none' }} />
+                    <X className="w-3 h-3" style={{ pointerEvents: 'none' }} />
                   </button>
                 )}
               </div>
             ))}
           </div>
         </div>
-
       )}
     </div>
   );
@@ -1397,12 +1568,22 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
   const { studentData } = useAuth();
   const { refreshPlayers, serverTimeOffset } = useGame();
   const [votes, setVotes] = useState<any[]>([]);
-  const alivePlayers = players.filter((p: any) => !p.is_eliminated && !p.is_host);
+  const alivePlayers = players.filter((p: any) => !p.is_eliminated && !p.is_host && !p.is_spectator);
   const currentUser = players.find((p: any) => p.id === studentData?.playerId);
-  const isSpectator = currentUser?.is_eliminated;
+  const isSpectator = currentUser?.is_eliminated || currentUser?.is_spectator;
+
+  console.log("🔍 REVISANDO ESTADO DEL JUGADOR:", {
+    nombre: currentUser?.nickname,
+    estaEliminado: currentUser?.is_eliminated,
+    esEspectador: currentUser?.is_spectator,
+    bloqueoActivado: isSpectator
+  });
 
   const circleRef = useRef(null);
   const tlRef = useRef<gsap.core.Tween | null>(null);
+
+  // ── NUEVO: CANDADO ANTI-DOBLE EJECUCIÓN ──
+  const isProcessingRef = useRef(false);
 
   // Jump-free Absolute Timer
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -1415,13 +1596,9 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
     const fetchVotes = async () => {
       const { data, error } = await supabase.from('votes').select('*').eq('room_id', roomId);
       if (error) console.error('❌ FETCH VOTES ERROR:', error);
-      else {
-        console.log('📥 FETCH VOTES DB (Current Length):', data?.length);
-        setVotes(data || []);
-      }
+      else setVotes(data || []);
     };
 
-    // Initial fetch with small delay to let DB settle after round transition
     const timer = setTimeout(fetchVotes, 300);
 
     let isSubscribed = false;
@@ -1430,15 +1607,11 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
         fetchVotes();
       });
 
-    channel.subscribe((status, err) => {
-      console.log('🔌 CANAL VOTES STATUS:', status, err || '');
+    channel.subscribe((status) => {
       if (status === 'SUBSCRIBED') isSubscribed = true;
     });
 
-    // Polling fallback mechanism
-    const fetchVotesFallback = setInterval(() => {
-      fetchVotes();
-    }, 2500);
+    const fetchVotesFallback = setInterval(fetchVotes, 2500);
 
     return () => {
       clearTimeout(timer);
@@ -1462,52 +1635,40 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
   const displayTime = gameState.is_paused ? pausedTimeRef.current : actualTimeLeft;
 
   useEffect(() => {
-    if (gameState.is_paused) return; // freeze visual tick
+    if (gameState.is_paused) return;
     const interval = setInterval(() => setTick(t => t + 1), 500);
     return () => clearInterval(interval);
   }, [gameState.is_paused]);
 
-  // ── SMART VOTING LISTENER: fires calculateResults when all votes are cast
-  // Dedicated useEffect so it's never blocked by the timer or is_paused state.
   useEffect(() => {
     if (isTeacher && votes.length > 0 && votes.length === alivePlayers.length) {
-      console.log('[VOTING] All votes in — triggering calculateResults()');
       calculateResults();
     }
   }, [votes, alivePlayers, isTeacher]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Timer expiry fallback (in case someone never votes)
   useEffect(() => {
     if (actualTimeLeft <= 0 && isTeacher && !gameState.is_paused) {
-      console.log('[VOTING] Timer expired — triggering calculateResults()');
       calculateResults();
     }
   }, [actualTimeLeft, isTeacher, gameState.is_paused]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // GSAP logic
   useEffect(() => {
     if (!gameState.turn_started_at) return;
-
     tlRef.current = gsap.to(circleRef.current, {
       strokeDashoffset: 0,
       duration: room.voting_duration,
       ease: 'none',
       paused: gameState.is_paused
     });
-
-    return () => {
-      if (tlRef.current) tlRef.current.kill();
-    };
+    return () => { if (tlRef.current) tlRef.current.kill(); };
   }, [gameState.turn_started_at]);
 
-  // Handle Pause/Resume Sync — kill stale GSAP tween to prevent ghost timer
   useEffect(() => {
     if (!tlRef.current) return;
     if (gameState.is_paused) {
       tlRef.current.pause();
     } else {
       tlRef.current.kill();
-      // Rebuild tween from current remaining time so the visual threshold (5s red) is accurate
       const startedAt = new Date(gameState.turn_started_at || Date.now()).getTime();
       const nowWithOffset = Date.now() + (serverTimeOffset || 0);
       const elapsedS = (nowWithOffset - startedAt) / 1000;
@@ -1536,56 +1697,73 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
   const hasVoted = votes.some(v => v.voter_id === studentData?.playerId);
 
   const handleVote = async (targetId: string) => {
-    console.log('⚙️ FUNCIÓN EJECUTADA para:', targetId);
-    if (isSpectator) {
-      console.warn('⛔ VOTO BLOQUEADO: El usuario es espectador.');
-      return;
-    }
-    if (!studentData?.playerId) {
-      console.warn('Bloqueado por validación: studentData.playerId es undefined');
-      return;
-    }
+    if (isSpectator || !studentData?.playerId) return;
     const { error } = await supabase.from('votes').upsert(
       { room_id: roomId, voter_id: studentData.playerId, target_id: targetId },
       { onConflict: 'room_id,voter_id' }
     );
     if (error) console.error('❌ ERROR al insertar voto:', error.message);
-    else console.log('✅ VOTO REGISTRADO para:', targetId);
   };
 
   const calculateResults = async () => {
-    const hasImpostors = players.some((p: any) => p.role === 'IMPOSTOR' && !p.is_host);
+    if (isProcessingRef.current) return;
 
-    // CANDADO ABSOLUTO
-    if (gameState.phase === 'LOBBY' || players.filter((p: any) => !p.is_host).length < 3 || !hasImpostors) {
-      console.warn('⛔ calculateResults BLOQUEADO: Faltan jugadores o el Impostor abandonó la sala.');
-      return; // <--- VITAL
+    // ── CERRAMOS EL CANDADO TEMPRANO ──
+    isProcessingRef.current = true;
+
+    // ── CANDADO ANTI-LATENCIA (Lectura Real-Time a la DB) ──
+    // Evadimos el estado local de React que puede estar desactualizado por milisegundos.
+    const { data: livePhysicalPlayers, error: fetchError } = await supabase
+      .from('players')
+      .select('id, role')
+      .eq('room_id', roomId)
+      .eq('is_host', false)
+      .eq('is_spectator', false);
+
+    if (fetchError || !livePhysicalPlayers) {
+      isProcessingRef.current = false;
+      return;
     }
 
-    // Traemos los votos frescos de la DB
+    const hasImpostorsLive = livePhysicalPlayers.some(p => p.role === 'IMPOSTOR');
+
+    // ── VERIFICACIÓN DE EMERGENCIA DIRECTA DE LA DB ──
+    if (livePhysicalPlayers.length < 3 || !hasImpostorsLive) {
+      console.warn('⛔ ABORTO CONFIRMADO: Jugador salió durante la votación. Abortando a LOBBY.');
+      if (isTeacher) {
+        await supabase.from('votes').delete().eq('room_id', roomId);
+        await supabase.from('game_state').update({
+          phase: 'LOBBY',
+          current_turn_index: 0,
+          is_paused: false,
+          last_eliminated_info: null
+        }).eq('room_id', roomId);
+
+        // Limpiamos a los supervivientes para el Lobby
+        // Limpiamos a TODOS para el Lobby (incluso si eran espectadores)
+        await supabase.from('players').update({ is_eliminated: false, turn_order: null, is_spectator: false }).eq('room_id', roomId);
+      }
+      return; // Fin de la ejecución. Jamás evaluará la victoria.
+    }
+
+    // ── SI EL QUÓRUM ESTÁ INTACTO, PROCESAMOS VOTOS NORMALMENTE ──
     const { data: liveVotes } = await supabase.from('votes').select('*').eq('room_id', roomId);
 
-    // --- CANDADO 2: Si nadie votó, nadie muere ---
-    // Eliminamos el "randomTarget" porque queremos justicia por votos.
     if (!liveVotes || liveVotes.length === 0) {
       console.log('🗳️ SIN VOTOS: Empate técnico por silencio.');
       await processRoundEnd(null);
       return;
     }
 
-    // 1. Conteo de votos
     const targetCounts: Record<string, number> = {};
     liveVotes.forEach(v => {
       targetCounts[v.target_id] = (targetCounts[v.target_id] || 0) + 1;
     });
 
-    // 2. Encontrar el máximo y ver cuántos lo comparten
     const maxVotes = Math.max(...Object.values(targetCounts), 0);
     const topCandidates = Object.keys(targetCounts).filter(id => targetCounts[id] === maxVotes);
 
-    // --- CANDADO 3: Regla de Mayoría y Empate ---
-    // Solo hay eliminado si hay EXACTAMENTE un candidato con el máximo de votos.
-    // Si topCandidates.length > 1, significa que hay empate (ej: 2 votos para A, 2 para B).
+    // Solo se elimina si no hay empate en el máximo de votos
     const eliminatedId = topCandidates.length === 1 ? topCandidates[0] : null;
 
     if (!eliminatedId && maxVotes > 0) {
@@ -1595,20 +1773,26 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
     await processRoundEnd(eliminatedId);
   };
 
-  // Separated: the actual elimination + round transition logic
   const processRoundEnd = async (eliminatedId: string | null) => {
-    // TAREA 1: SOLO ese jugador sea marcado como is_eliminated
+    let lastEliminatedInfo = null;
+
     if (eliminatedId) {
       await supabase.from('players').update({ is_eliminated: true }).eq('id', eliminatedId);
-      refreshPlayers(); // TAREA 3: UI Sync Inmediata
+      refreshPlayers();
 
       const eliminatedPlayer = alivePlayers.find((p: any) => p.id === eliminatedId);
+      if (eliminatedPlayer) {
+        lastEliminatedInfo = {
+          nickname: eliminatedPlayer.nickname,
+          wasImpostor: eliminatedPlayer.role === 'IMPOSTOR'
+        };
+      }
+
       if (eliminatedPlayer?.role === 'IMPOSTOR') {
         const winners = alivePlayers.filter((p: any) => p.id !== eliminatedId);
         const updates = winners.map((p: any) => supabase.from('players').update({ score: (p.score || 0) + 10 }).eq('id', p.id));
         await Promise.all(updates);
       } else if (eliminatedPlayer) {
-        // Native killed -> Impostor +2 pts
         const impostor = players.find((p: any) => p.role === 'IMPOSTOR');
         if (impostor) {
           await supabase.from('players').update({ score: (impostor.score || 0) + 2 }).eq('id', impostor.id);
@@ -1616,35 +1800,30 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
       }
     }
 
-    // TAREA 2: Lógica de Victoria (Delegada a global o manejada acá si sobrevive)
     const newAlive = eliminatedId ? alivePlayers.filter((p: any) => p.id !== eliminatedId) : alivePlayers;
-
     const impostorsAlive = newAlive.filter((p: any) => p.role === 'IMPOSTOR').length;
     const nativesAlive = newAlive.length - impostorsAlive;
 
+    const updatePayload: any = { last_eliminated_info: lastEliminatedInfo };
+
     if (impostorsAlive === 0) {
-      // Ganan Nativos
-      await supabase.from('game_state').update({ phase: 'RESULTS' }).eq('room_id', roomId);
+      updatePayload.phase = 'RESULTS';
     } else if (nativesAlive <= impostorsAlive) {
-      // Ganan Impostores por superioridad
-      console.warn('📝 DB WRITE - Cambiando game_state:', { nuevaFase: 'RESULTS', disparadoPor: 'processRoundEnd (Superioridad)' });
-      await supabase.from('game_state').update({ phase: 'RESULTS' }).eq('room_id', roomId);
+      updatePayload.phase = 'RESULTS';
     } else if (gameState.current_round >= gameState.max_rounds) {
-      // Ganan Impostores por supervivencia
-      console.warn('📝 DB WRITE - Cambiando game_state:', { nuevaFase: 'RESULTS', disparadoPor: 'processRoundEnd (Supervivencia)' });
-      await supabase.from('game_state').update({ phase: 'RESULTS' }).eq('room_id', roomId);
+      updatePayload.phase = 'RESULTS';
     } else {
-      // Standby Intermedio (Nadie gana aún, a la siguiente ronda)
       await supabase.from('votes').delete().eq('room_id', roomId);
-      console.warn('📝 DB WRITE - Cambiando game_state:', { nuevaFase: 'ROUND_STANDBY', disparadoPor: 'processRoundEnd' });
-      await supabase.from('game_state').update({ phase: 'ROUND_STANDBY' }).eq('room_id', roomId);
+      updatePayload.phase = 'ROUND_STANDBY';
     }
+
+    await supabase.from('game_state').update(updatePayload).eq('room_id', roomId);
   };
 
   return (
-    <div className="w-full max-w-4xl text-center flex flex-col items-center gap-8 pt-8 md:pt-0 animate-in slide-in-from-bottom-8 min-h-screen">
-      <div className="flex flex-col md:flex-row items-center justify-center gap-20 w-full bg-black/40 backdrop-blur-xl p-20 rounded-[40px] border border-white/5 shadow-[0_40px_100px_rgba(0,0,0,0.4)] animate-pulse-slow shadow-neon-pulse-violet">
-        <div className="relative w-56 h-56 flex items-center justify-center">
+    <div className="w-full max-w-4xl text-center md:pt-32 flex flex-col items-center gap-0 pt-0 animate-in slide-in-from-bottom-8 min-h-fit">
+      <div className="flex flex-col md:flex-row items-center justify-center gap-0 md:gap-10 w-full bg-black/40 backdrop-blur-xl p-4 md:p-8 rounded-[40px] border border-white/10 shadow-[0_40px_100px_rgba(0,0,0,0.4)] animate-pulse-slow shadow-neon-pulse-violet">
+        <div className="relative w-20 h-20 md:w-56 md:h-56 flex items-center justify-center">
           <svg className="absolute w-full h-full -rotate-90" viewBox="0 0 100 100">
             <circle cx="50" cy="50" r="46" fill="none" stroke="rgba(255,255,255,0.03)" strokeWidth="4" />
             <circle
@@ -1660,24 +1839,21 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
               className={displayTime <= 5 ? 'animate-pulse' : ''}
             />
           </svg>
-          <div className={`relative z-10 text-6xl font-jetbrains font-black text-white ${displayTime <= 5 ? 'text-[#ff003c] animate-pulse drop-shadow-neon-red' : 'drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]'}`}>
+          <div className={`relative z-10 text-4xl md:text-6xl font-jetbrains font-black text-white ${displayTime <= 5 ? 'text-[#ff003c] animate-pulse drop-shadow-neon-red' : 'drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]'}`}>
             {displayTime}
           </div>
         </div>
 
-        <div className="space-y-6 text-left max-w-lg">
-          <div className="flex items-center gap-4 md:pt-20 text-purple-500 drop-shadow-neon-violet animate-pulse mb-2">
-            <Crosshair className="w-10 h-10" />
-            <span className="font-jetbrains text-xs tracking-[0.8em] font-black uppercase ml-2">It's time to vote!</span>
+        <div className="space-y-4 text-left max-w-lg">
+          <div className="flex items-center gap-2 pt-2 text-purple-500 drop-shadow-neon-violet animate-pulse mb-2">
+            <Crosshair className="w-5 md:w-8 h-5 md:h-8" />
+            <span className="font-jetbrains text-xs tracking-[0.4em] font-black uppercase ml-2">It's time to vote!</span>
           </div>
-          <h2 className="text-6xl font-black font-sora text-white uppercase tracking-tighter leading-none mb-4">Eliminate <br /><span className="bg-gradient-to-r from-whapigen-cyan to-purple-400 bg-clip-text text-transparent">The Impostor</span></h2>
-          <p className="text-white/70 font-jetbrains text-xs tracking-[0.4em] font-black uppercase leading-relaxed max-w-sm">
-            {isTeacher ? 'Monitoring mission consensus signals...' : isSpectator ? 'SPECTATOR MODE // Awaiting next mission' : (hasVoted ? 'Action Secured. Awaiting mission verdict' : 'think of a suspected impostor and cast your veredict')}
-          </p>
+          <h2 className="text-2xl md:text-4xl font-black font-sora text-white uppercase tracking-tighter leading-none mb-4">Eliminate <br /><span className="bg-gradient-to-r from-whapigen-cyan to-purple-400 bg-clip-text text-transparent">The Impostor</span></h2>
           {isTeacher && (
             <button
               onClick={togglePause}
-              className={`mt-10 px-12 py-5 rounded-full font-sora text-[10px] tracking-[0.4em] transition-all font-black uppercase shadow-2xl overflow-x-hidden relative group/pause ${gameState.is_paused ? 'bg-gradient-to-r from-green-400 to-green-600 text-black shadow-[0_20px_50px_rgba(34,197,94,0.3)]' : 'bg-white/5 border border-white/10 text-whapigen-cyan hover:bg-whapigen-cyan hover:text-black hover:shadow-neon-cyan/50'}`}
+              className={`mt-12 px-12 py-5 rounded-full font-sora text-[10px] tracking-[0.4em] transition-all font-black uppercase shadow-2xl overflow-x-hidden relative group/pause ${gameState.is_paused ? 'bg-gradient-to-r from-green-400 to-green-600 text-black shadow-[0_20px_50px_rgba(34,197,94,0.3)]' : 'bg-white/5 border border-white/10 text-whapigen-cyan hover:bg-whapigen-cyan hover:text-black hover:shadow-neon-cyan/50'}`}
             >
               <span style={{ pointerEvents: 'none' }}>{gameState.is_paused ? 'Resume Voting' : 'Pause Protocol'}</span>
             </button>
@@ -1685,7 +1861,7 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 w-full px-4">
+      <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-4 w-full mt-2 px-0 md:px-4">
         {[...alivePlayers].sort((a: any, b: any) => a.nickname.localeCompare(b.nickname)).map((p: any) => {
           const voteCount = votes.filter(v => v.target_id === p.id).length;
           const isMe = p.id === studentData?.playerId;
@@ -1693,17 +1869,17 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
           return (
             <div
               key={p.id}
-              className={`px-6 py-4 bg-black/40 backdrop-blur-xl border transition-all duration-700 flex flex-col items-center justify-between rounded-[30px] shadow-2xl relative overflow-x-hidden group/card animate-pulse-slow ${voteCount > 0 ? 'border-whapigen-red shadow-[0_0_80px_rgba(255,49,49,0.15)] bg-whapigen-red/5' : 'border-white/5 hover:border-whapigen-cyan/30'}`}
+              className={`px-2 md:px-12 py-2 md:py-4 bg-black/40 backdrop-blur-xl border transition-all duration-700 flex flex-col items-center justify-between rounded-[30px] shadow-2xl relative overflow-x-hidden group/card animate-pulse-slow ${voteCount > 0 ? 'border-whapigen-red shadow-[0_0_80px_rgba(255,49,49,0.15)] bg-whapigen-red/5' : 'border-white/10 hover:border-whapigen-cyan/30'}`}
             >
               <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-whapigen-cyan to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity"></div>
               <div className="relative z-10 flex flex-col items-center w-full">
-                <div className="w-12 h-12 rounded-2xl mb-2 bg-white/[0.03] flex items-center justify-center border border-white/5 shadow-inner group-hover/card:scale-110 transition-transform duration-500">
-                  <Users className="w-6 h-6 text-whapigen-cyan/20 group-hover/card:text-whapigen-cyan transition-colors" />
+                <div className="w-6 h-6 md:w-12 md:h-12 rounded-2xl mb-2 bg-white/[0.03] flex items-center justify-center border border-white/5 shadow-inner group-hover/card:scale-110 transition-transform duration-500">
+                  <Users className="w-4 h-4 md:w-6 md:h-6 text-whapigen-cyan/20 group-hover/card:text-whapigen-cyan transition-colors" />
                 </div>
-                <p className="text-white font-sora tracking-tighter font-black uppercase text-2xl group-hover/card:text-whapigen-cyan transition-colors">{p.nickname}</p>
+                <p className="text-white font-sora tracking-tighter font-black uppercase text-xl md:text-2xl group-hover/card:text-whapigen-cyan transition-colors">{p.nickname}</p>
                 {isTeacher && (
-                  <div className="flex flex-col items-center gap-4 mt-4 w-full">
-                    <span className="text-white font-black font-jetbrains text-xs tracking-[0.5em] uppercase px-6 py-2 rounded-full border border-white/5 bg-white/5">
+                  <div className="flex flex-col items-center gap-2 md:gap-4 mt-4 w-full">
+                    <span className="text-white font-black font-jetbrains text-xs tracking-[0.1em] uppercase md:px-6 px-2 py-1 md:py-2 rounded-full border border-white/5 bg-white/5">
                       Votes: {voteCount}
                     </span>
                     <button
@@ -1722,7 +1898,7 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
                           }
                         });
                       }}
-                      className="relative z-[9999] pointer-events-auto text-whapigen-red/70 hover:text-white transition-all bg-white/5 hover:bg-whapigen-red border border-white/10 hover:border-whapigen-red px-6 py-2 rounded-full text-[9px] font-black tracking-[0.4em] w-full uppercase"
+                      className="relative z-[9999] pointer-events-auto text-whapigen-red/70 hover:text-white transition-all bg-white/5 hover:bg-whapigen-red border border-white/10 hover:border-whapigen-red md:px-4 px-0 py-1 rounded-full text-[9px] font-black tracking-[0.4em] w-full uppercase"
                     >
                       Kick System
                     </button>
@@ -1739,7 +1915,7 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
                       handleVote(p.id);
                     }}
                     disabled={hasVoted}
-                    className={`relative z-50 pointer-events-auto w-full font-sora text-[11px] tracking-[0.4em] py-5 rounded-3xl transition-all font-black uppercase shadow-[0_8px_0_#4c1d95] ${hasVoted ? 'bg-white/5 text-white/10 border border-white/5 translate-y-2 shadow-none cursor-default' : 'bg-gradient-to-br from-purple-600 to-purple-800 text-white border-t border-purple-400/30 hover:-translate-y-1 hover:shadow-neon-pulse-violet active:translate-y-2 active:shadow-none'}`}
+                    className={`relative z-50 pointer-events-auto w-full font-sora text-[11px] tracking-[0.4em] py-2 rounded-3xl transition-all font-black uppercase shadow-[0_8px_0_#4c1d95] ${hasVoted ? 'bg-white/5 text-white/10 border border-white/5 translate-y-2 shadow-none cursor-default' : 'bg-gradient-to-br from-purple-600 to-purple-800 text-white border-t border-purple-400/30 hover:-translate-y-1 hover:shadow-neon-pulse-violet active:translate-y-2 active:shadow-none'}`}
                     style={{ transform: 'translateZ(0)' }}
                   >
                     <span style={{ pointerEvents: 'none' }}>{hasVoted ? 'Voted' : 'VOTE'}</span>
@@ -1752,21 +1928,39 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
       </div>
 
       {isTeacher && (
-        <div className="flex flex-col items-center mt-8 space-y-4">
-          {votes.length < alivePlayers.length ? (
-            <div className="text-white/70 font-jetbrains text-xs tracking-[0.6em] animate-pulse border border-white/5 p-6 rounded-full bg-white/5 uppercase font-black backdrop-blur-xl px-12 shadow-inner">
-              Consensus in Progress: {votes.length}/{alivePlayers.length}
-            </div>
-          ) : (
-            <button
-              onClick={calculateResults}
-              className="h-20 px-24 bg-gradient-to-r from-whapigen-cyan to-purple-600 text-black hover:scale-105 active:scale-95 font-sora font-black tracking-[0.4em] uppercase rounded-full transition-all shadow-[0_20px_60px_rgba(0,240,255,0.2)] hover:shadow-neon-cyan/50 ring-2 ring-white/10"
-            >
-              Authorize Verdict
-            </button>
-          )}
+        <div className="flex flex-col items-center mt-4 md:mt-8 space-y-4">
+          {/* Vote progress — always visible. Closing is handled automatically by the
+              votes-complete useEffect and the timer useEffect. No manual button needed. */}
+          <div className={`text-white/70 font-jetbrains text-xs tracking-[0.2em] border p-4 rounded-full bg-white/5 uppercase font-black backdrop-blur-xl px-12 shadow-inner ${votes.length >= alivePlayers.length ? 'border-whapigen-cyan/40 text-whapigen-cyan animate-pulse' : 'border-white/5 animate-pulse'}`}>
+            {votes.length >= alivePlayers.length
+              ? `Consensus Reached: ${votes.length}/${alivePlayers.length} — Processing...`
+              : `Consensus in Progress: ${votes.length}/${alivePlayers.length}`}
+          </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function EliminationAnnouncement({ info }: { info: any }) {
+  if (!info) {
+    return (
+      <div className="flex flex-col items-center justify-center py-2 md:py-6 px-6 md:px-12 bg-white/5 border border-white/10 rounded-[30px] mb-4">
+        <span className="font-jetbrains text-sm tracking-[0.4em] text-white/50 uppercase">VOTING RESULT</span>
+        <h3 className="font-sora font-black text-xl text-white tracking-widest uppercase mt-2">IT'S A TIE. NO ONE WAS ELIMINATED.</h3>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`flex flex-col items-center justify-center py-2 md:py-6 px-6 md:px-12 border rounded-[30px] mb-8 animate-in zoom-in-50 duration-500 shadow-2xl ${info.wasImpostor ? 'bg-whapigen-green/10 border-whapigen-green/30 shadow-whapigen-green/20' : 'bg-whapigen-red/10 border-whapigen-red/30 shadow-whapigen-red/20'}`}>
+      <span className="font-jetbrains text-sm tracking-[0.4em] text-white/50 uppercase">VOTING RESULT</span>
+      <h3 className={`font-sora font-black text-xl md:text-2xl tracking-widest uppercase mt-2 ${info.wasImpostor ? 'text-whapigen-green' : 'text-whapigen-red'}`}>
+        {info.nickname} WAS ELIMINATED
+      </h3>
+      <p className="font-jetbrains tracking-[0.3em] text-white/70 uppercase mt-4 text-xs">
+        {info.wasImpostor ? 'THEY WERE AN IMPOSTOR' : 'THEY WERE NOT THE IMPOSTOR'}
+      </p>
     </div>
   );
 }
@@ -1783,7 +1977,7 @@ function PhaseResults({ isTeacher, roomId, players }: { isTeacher: boolean, room
   // 2. Contamos vivos de cada bando
   const aliveImpostorsCount = allImpostors.filter((p: any) => !p.is_eliminated).length;
   const aliveNativesCount = players.filter((p: any) =>
-    p.role !== 'IMPOSTOR' && !p.is_eliminated && !p.is_host
+    p.role !== 'IMPOSTOR' && !p.is_eliminated && !p.is_host && !p.is_spectator // <-- Se agregó !p.is_spectator
   ).length;
 
   // 3. Lógica de victoria: El impostor gana si:
@@ -1804,21 +1998,23 @@ function PhaseResults({ isTeacher, roomId, players }: { isTeacher: boolean, room
   const titleText = impostorWon ? (isPlural ? 'IMPOSTORS WIN' : 'IMPOSTOR WINS') : 'PLAYERS WIN';
 
   return (
-    <div className="w-full max-w-2xl text-center space-y-12 pt-8 md:pt-48 animate-in zoom-in-50 duration-700 min-h-screen">
-      <div className="space-y-6 flex flex-col items-center">
+    <div className="w-full max-w-2xl text-center space-y-4 md:space-y-12 pt-2 md:pt-28 animate-in zoom-in-50 duration-700 min-h-screen">
+      <div className="space-y-2 md:space-y-6 flex flex-col items-center">
+        {/* ANUNCIO DEL ÚLTIMO VOTO ANTES DE LOS RESULTADOS GLOBALES */}
+        <EliminationAnnouncement info={gameState?.last_eliminated_info} />
         <p className="font-jetbrains text-xs tracking-[0.4em] text-white/70 mb-2">ROUNDS PLAYED: {currentRound}</p>
         <h3 className="text-whapigen-cyan font-jetbrains tracking-[0.3em] text-sm uppercase">MISSION CONCLUDED</h3>
-        <h2 className={`text-4xl font-sora font-black uppercase tracking-tighter drop-shadow-md ${impostorWon ? 'text-whapigen-red drop-shadow-neon-red' : 'text-whapigen-green drop-shadow-neon-green'}`}>
+        <h2 className={`text-3xl md:text-4xl font-sora font-black uppercase tracking-tighter drop-shadow-md ${impostorWon ? 'text-whapigen-red drop-shadow-neon-red' : 'text-whapigen-green drop-shadow-neon-green'}`}>
           {titleText}
         </h2>
-        <p className="text-white/70 font-jetbrains text-lg tracking-[0.4em] uppercase pt-4 opacity-70">
+        <p className="text-white/70 font-jetbrains text-lg tracking-[0.1em] uppercase pt-4 opacity-70">
           {impostorText}
         </p>
       </div>
 
       {/* Scoreboard */}
-      <div className="bg-black/60 backdrop-blur-xl border border-white/10 rounded-[40px] p-8 md:p-16 mt-8 md:mt-12 shadow-[0_40px_100px_rgba(0,0,0,0.5)] w-full max-w-2xl transform hover:scale-[1.02] transition-transform duration-700 shadow-neon-pulse-cyan">
-        <h3 className="text-white font-black font-jetbrains tracking-[0.4em] md:tracking-[0.8em] text-sm md:text-lg mb-3 md:mb-3 border-b border-white/5 pb-6 uppercase text-center w-full">
+      <div className="bg-black/60 backdrop-blur-xl border border-white/10 rounded-[20px] p-2 md:p-8 mt-2 md:mt-4 shadow-[0_40px_100px_rgba(0,0,0,0.5)] w-full max-w-2xl transform hover:scale-[1.02] transition-transform duration-700 shadow-neon-pulse-cyan">
+        <h3 className="text-white font-black font-jetbrains tracking-[0.4em] md:tracking-[0.8em] text-sm md:text-lg mb-0 md:mb-3 border-b border-white/5 pb-6 uppercase text-center w-full">
           Scoreboard
         </h3>
         <div className="flex flex-col gap-2">
@@ -1826,16 +2022,16 @@ function PhaseResults({ isTeacher, roomId, players }: { isTeacher: boolean, room
             .filter((p: any) => !p.is_host)
             .sort((a: any, b: any) => (b.score - a.score) || a.nickname.localeCompare(b.nickname))
             .map((p: any) => (
-              <div key={p.id} className="flex justify-between items-center bg-white/[0.03] p-6 rounded-[30px] border border-white/5 transition-all hover:bg-white/[0.06] hover:border-whapigen-cyan/20 group/row group relative overflow-x-hidden">
+              <div key={p.id} className="flex justify-between items-center bg-white/[0.03] p-0.5 rounded-[30px] border border-white/5 transition-all hover:bg-white/[0.06] hover:border-whapigen-cyan/20 group/row group relative overflow-x-hidden">
                 <div className="absolute inset-0 bg-gradient-to-r from-whapigen-cyan/5 to-transparent opacity-0 group-hover/row:opacity-100 transition-opacity"></div>
-                <div className="flex items-center gap-2 md:gap-6 relative z-10">
+                <div className="flex items-center gap-2 md:gap-4 relative z-10">
                   <div className={`w-3 h-3 rounded-full ${p.is_eliminated ? 'bg-gray-800' : 'bg-whapigen-cyan shadow-neon-cyan'}`}></div>
-                  <span className={`font-sora tracking-tighter text-xl uppercase ${p.is_eliminated ? 'text-white/20 line-through' : 'text-white font-black'}`}>{p.nickname}</span>
+                  <span className={`font-sora tracking-tighter text-[11px] md:text-[18px] uppercase ${p.is_eliminated ? 'text-white/20 line-through' : 'text-white font-black'}`}>{p.nickname}</span>
                 </div>
-                <div className="relative z-10">
-                  <span className="font-jetbrains font-black text-white text-[12px] md:text-[18px] tracking-widest px-5 py-2 bg-white/5 rounded-full border border-white/5 group-hover/row:bg-whapigen-cyan group-hover/row:text-black transition-all group-hover/row:scale-110">
+                <div className="relative z-10 mr-1 md:mr-2"> {/* <-- Margen derecho extra para el hover */}
+                  <div className="inline-block font-jetbrains font-black text-white text-[11px] md:text-[18px] tracking-widest px-3 py-0.5 bg-white/5 rounded-full border border-white/5 group-hover/row:bg-whapigen-cyan group-hover/row:text-black transition-all duration-300 group-hover/row:scale-110 transform origin-right">
                     {p.score || 0} PTS
-                  </span>
+                  </div>
                 </div>
               </div>
             ))}
@@ -1846,10 +2042,10 @@ function PhaseResults({ isTeacher, roomId, players }: { isTeacher: boolean, room
         <button
           onClick={async () => {
             console.warn('📝 DB WRITE - Cambiando game_state:', { nuevaFase: 'LOBBY', disparadoPor: 'Reset Protocol' });
-            await supabase.from('players').update({ is_eliminated: false, turn_order: null }).eq('room_id', roomId);
-            await supabase.from('game_state').update({ phase: 'LOBBY', current_turn_index: 0 }).eq('room_id', roomId);
+            await supabase.from('players').update({ is_eliminated: false, turn_order: null, is_spectator: false }).eq('room_id', roomId);
+            await supabase.from('game_state').update({ phase: 'LOBBY', current_turn_index: 0, last_eliminated_info: null }).eq('room_id', roomId);
           }}
-          className="px-24 py-6 bg-gradient-to-r from-whapigen-cyan to-purple-600 text-black hover:scale-105 active:scale-95 font-sora font-black tracking-[0.5em] uppercase rounded-full transition-all shadow-2xl mt-12 ring-2 ring-white/10"
+          className="px-24 py-2 md:py-6 bg-gradient-to-r from-whapigen-cyan to-purple-600 text-black hover:scale-105 active:scale-95 font-sora font-black tracking-[0.5em] uppercase rounded-full transition-all shadow-2xl mt-12 ring-2 ring-white/10"
         >
           RESET GAME
         </button>
@@ -1860,16 +2056,25 @@ function PhaseResults({ isTeacher, roomId, players }: { isTeacher: boolean, room
 
 // ---------------- ROUND STANDBY PHASE ----------------
 function PhaseStandby({ isTeacher, roomId, players, gameState }: { isTeacher: boolean, roomId: string, players: any[], gameState: any }) {
+  // ── NUEVO: CANDADO ANTI-DOBLE CLIC PARA AVANCE DE RONDA ──
+  const isStartingRef = useRef(false);
+
   const startNextRound = async () => {
+    if (isStartingRef.current) return; // Bloqueado si ya se presionó
+    isStartingRef.current = true;
+
     const alivePlayers = players
-      .filter(p => !p.is_eliminated && !p.is_host)
+      .filter(p => !p.is_eliminated && !p.is_host && !p.is_spectator)
       .sort((a, b) => (a.turn_order || 0) - (b.turn_order || 0));
 
-    if (alivePlayers.length === 0) return;
+    if (alivePlayers.length === 0) {
+      isStartingRef.current = false;
+      return;
+    }
 
     const firstPlayer = alivePlayers[0];
 
-    console.warn('📝 DB WRITE - Cambiando game_state:', { nuevaFase: 'SPEAKING_TURNS', disparadoPor: 'PhaseStandby (Siguiente Ronda)' });
+    console.warn('📝 DB WRITE - Cambiando game_state a SPEAKING_TURNS');
     await supabase.from('game_state').update({
       phase: 'SPEAKING_TURNS',
       current_round: gameState.current_round + 1,
@@ -1882,6 +2087,7 @@ function PhaseStandby({ isTeacher, roomId, players, gameState }: { isTeacher: bo
   return (
     <div className="w-full max-w-2xl text-center space-y-12 md:mt-48 pt-8 md:pt-0 animate-in zoom-in-50 duration-700 min-h-screen">
       <div className="space-y-4">
+        <EliminationAnnouncement info={gameState?.last_eliminated_info} />
         <h3 className="text-whapigen-cyan font-jetbrains tracking-[0.3em] text-sm uppercase">ROUND {gameState.current_round} CONCLUDED</h3>
         <h2 className="text-4xl md:text-5xl font-sora font-black uppercase tracking-tighter drop-shadow-md text-white">
           AWAITING COORDINATOR
@@ -1904,53 +2110,41 @@ function PhaseStandby({ isTeacher, roomId, players, gameState }: { isTeacher: bo
 }
 
 // ---------------- PERSISTENT WORD HELPER ----------------
-function PersistentWordBar({ role, secretWord, hintsEnabled, hints, phaseStartedAt }: {
+function PersistentWordBar({ role, secretWord, hintsEnabled, hints }: {
   role?: string;
   secretWord: string | null;
   hintsEnabled?: boolean;
   hints?: [string, string] | null;
-  phaseStartedAt?: string | null;
 }) {
   const [revealed, setRevealed] = useState(false);
   const [canReceiveIntel, setCanReceiveIntel] = useState(false);
   const [intelRevealed, setIntelRevealed] = useState(false);
 
-  // ── IMPOSTOR HINT TIMER: unlock "RECEIVE INTEL" button after 10 seconds ──
+  // ── IMPOSTOR HINT: Immediate access, no timer ──
   useEffect(() => {
-    if (role !== 'IMPOSTOR' || !hintsEnabled || !hints || !phaseStartedAt) {
+    if (role !== 'IMPOSTOR' || !hintsEnabled || !hints) {
       setCanReceiveIntel(false);
       setIntelRevealed(false);
       return;
     }
-
-    const startedAt = new Date(phaseStartedAt).getTime();
-    const elapsed = Date.now() - startedAt;
-    const remainingMs = Math.max(0, 10_000 - elapsed);
-
-    if (elapsed >= 10_000) {
-      setCanReceiveIntel(true);
-      return;
-    }
-
-    const timer = setTimeout(() => setCanReceiveIntel(true), remainingMs);
-    return () => clearTimeout(timer);
-  }, [role, hintsEnabled, hints, phaseStartedAt]);
+    setCanReceiveIntel(true);
+  }, [role, hintsEnabled, hints]);
 
   return (
     <div
-      className="relative md:fixed md:top-[153px] md:left-1/2 md:-translate-x-1/2 z-[80] bg-black/60 backdrop-blur-xl border border-white/5 text-whapigen-cyan font-jetbrains px-8 md:px-12 py-3 md:py-5 rounded-full shadow-[0_30px_60px_rgba(0,0,0,0.5)] cursor-pointer select-none max-w-[85vw] mx-auto md:mx-0 transition-all hover:bg-white/5 group/word ring-1 ring-white/10 mt-4"
+      className="relative md:fixed md:top-8 md:left-1/2 md:-translate-x-1/2 z-[80] bg-black/60 backdrop-blur-xl border border-white/5 text-whapigen-cyan font-jetbrains px-2 py-2 rounded-[2rem] shadow-[0_30px_60px_rgba(0,0,0,0.5)] cursor-pointer select-none max-w-[85vw] mx-auto md:mx-0 transition-all hover:bg-white/5 group/word ring-1 ring-white/10 mt-4"
       onClick={() => setRevealed(prev => !prev)}
     >
       <div className="absolute inset-0 bg-digital-grid bg-[length:20px_20px] opacity-[0.01] pointer-events-none"></div>
       {!revealed ? (
-        <div className="flex items-center gap-4 font-black tracking-[0.3em] text-[10px] ml-[0.3em] group-hover/word:text-whapigen-cyan transition-colors">
+        <div className="flex items-center gap-4 font-black tracking-[0.1em] text-[10px] ml-[0.3em] group-hover/word:text-whapigen-cyan transition-colors">
           <EyeOff className="w-4 h-4 text-white/20 group-hover/word:text-whapigen-cyan transition-all" />
-          <span className="text-white/70 font-sora text-sm md:text-xs uppercase group-hover/word:text-white transition-colors animate-pulse">TOUCH TO REVEAL</span>
+          <span className="text-white/70 font-sora text-lg md:text-lg uppercase group-hover/word:text-white transition-colors animate-pulse">TOUCH TO REVEAL</span>
         </div>
       ) : (
         role === 'IMPOSTOR' ? (
-          <div className="flex flex-col items-center gap-3 animate-in slide-in-from-top duration-500">
-            <div className="flex items-center gap-2 md:gap-4 tracking-[0.2em] md:tracking-[0.4em] font-black text-[9px] md:text-[11px] w-max max-w-[80vw] md:max-w-none bg-whapigen-red/10 px-4 md:px-8 py-1 rounded-full border border-whapigen-red/20 whitespace-normal text-center">
+          <div className="flex flex-col items-center gap-1 animate-in slide-in-from-top duration-500">
+            <div className="flex items-center gap-2 md:gap-4 md:tracking-[0.1em] font-black text-xs md:text-lg w-max max-w-[80vw] md:max-w-none bg-whapigen-red/10 px-4 md:px-10 py-1 rounded-full border border-whapigen-red/20 whitespace-normal text-center">
               <EyeOff className="w-4 h-4 md:w-4 md:h-4 shrink-0 text-whapigen-red shadow-neon-red shadow-[0_0_15px_#ff3131]" />
               <span className="text-whapigen-red shadow-neon-red">YOU ARE THE IMPOSTOR</span>
             </div>
@@ -1958,7 +2152,7 @@ function PersistentWordBar({ role, secretWord, hintsEnabled, hints, phaseStarted
             {canReceiveIntel && hints && (
               <button
                 onClick={(e) => { e.stopPropagation(); setIntelRevealed(prev => !prev); }}
-                className={`flex items-center gap-2 tracking-[0.2em] text-[9px] font-bold px-6 py-2 rounded-full border transition-all cursor-pointer hover:scale-105 animate-in fade-in slide-in-from-bottom duration-700 ${intelRevealed
+                className={`flex items-center gap-2 tracking-[0.2em] text-xs md:text-lg font-bold px-2 py-2 rounded-full border transition-all cursor-pointer hover:scale-105 animate-in fade-in slide-in-from-bottom duration-700 ${intelRevealed
                   ? 'text-purple-300 bg-purple-600/30 border-purple-500/50 shadow-[0_0_20px_rgba(147,51,234,0.3)]'
                   : 'text-purple-400 bg-purple-600/20 hover:bg-purple-600/40 border-purple-500/30 hover:shadow-[0_0_20px_rgba(147,51,234,0.3)]'
                   }`}
@@ -1968,17 +2162,17 @@ function PersistentWordBar({ role, secretWord, hintsEnabled, hints, phaseStarted
               </button>
             )}
             {intelRevealed && hints && (
-              <div className="flex items-center gap-4 tracking-[0.2em] text-[9px] md:text-[11px] font-bold text-purple-400/90 bg-purple-600/10 px-6 py-1.5 rounded-full border border-purple-500/20 animate-in fade-in slide-in-from-bottom duration-700">
+              <div className="flex items-center gap-2 tracking-[0.2em] text-xs md:text-xs font-bold text-purple-400/90 bg-purple-600/10 px-2 py-1.5 rounded-full border border-purple-500/20 animate-in fade-in slide-in-from-bottom duration-700">
                 <span className="text-purple-500/50">HINT:</span>
                 <span>{hints[0]}</span>
               </div>
             )}
           </div>
         ) : (
-          <div className="flex items-center gap-2 md:gap-2 tracking-[0.2em] md:tracking-[0.2em] text-[9px] md:text-[11px] w-max max-w-[80vw] md:max-w-none bg-whapigen-cyan/10 px-4 py-1 rounded-full border border-whapigen-cyan/20 whitespace-normal text-center">
+          <div className="flex items-center gap-1 md:gap-2 tracking-[0.1em] md:tracking-[0.2em] text-lg md:text-lg w-max max-w-[80vw] md:max-w-none bg-whapigen-cyan/10 px-4 py-1 rounded-full border border-whapigen-cyan/20 whitespace-normal text-center">
             <Target className="w-4 h-4 text-whapigen-cyan shadow-neon-cyan" />
             <span className="text-white/70 text-sm">SECRET WORD:</span>
-            <span className="font-black text-white uppercase drop-shadow-neon-cyan tracking-[0.4em] break-words flex items-center justify-center min-w-0 text-center" style={{ fontSize: 'clamp(0.85rem, 3.5vw, 1.5rem)' }}>
+            <span className="font-black text-white uppercase drop-shadow-neon-cyan tracking-[0.2em] break-words flex items-center justify-center min-w-0 text-center" style={{ fontSize: 'clamp(0.85rem, 3.5vw, 1.5rem)' }}>
               {secretWord}
             </span>
           </div>

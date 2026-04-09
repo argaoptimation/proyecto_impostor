@@ -48,7 +48,7 @@ export default function Login() {
       <div className="absolute inset-0 bg-digital-grid bg-[length:40px_40px] opacity-[0.02] pointer-events-none"></div>
 
       {/* Header / Brand */}
-      <div className="mb-12 text-center relative z-10 animate-in fade-in slide-in-from-top duration-700">
+      <div className="mb-6 md:mb-12 text-center relative z-10 animate-in fade-in slide-in-from-top duration-700">
         <GlitchLogo size="md" isStatic={false} className="mb-6 mx-auto" />
         <h1 className="text-header-premium text-3xl md:text-4xl tracking-[0.1em]">
           TEACHER ACCESS
@@ -66,7 +66,7 @@ export default function Login() {
       <div className="w-full max-w-md p-10 relative overflow-hidden group bg-black/80 backdrop-blur-2xl border border-white/10 rounded-[30px] shadow-[0_20px_80px_rgba(0,0,0,0.5)] hover:shadow-neon-pulse-cyan transition-all duration-500 animate-in zoom-in-95 duration-700">
         <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-whapigen-cyan via-purple-600 to-whapigen-cyan opacity-30 group-hover:opacity-100 transition-opacity"></div>
 
-        <form onSubmit={handleLogin} className="space-y-8 relative z-10">
+        <form onSubmit={handleLogin} className="space-y-6 relative z-10">
           {/* Email Input */}
           <div className="space-y-3">
             <label className="text-whapigen-cyan font-jetbrains text-[10px] tracking-[0.3em] uppercase font-black flex items-center gap-2 ml-2">
@@ -123,26 +123,38 @@ export default function Login() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full h-16 bg-gradient-to-r from-whapigen-cyan to-purple-600 hover:from-white hover:to-white text-black font-sora font-black tracking-[0.4em] transition-all rounded-full flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed group/btn hover:shadow-neon-cyan/50 active:scale-95 transition-all outline-none"
+            className="w-full h-12 bg-gradient-to-r from-whapigen-cyan to-purple-600 hover:from-white hover:to-white text-black font-sora font-black tracking-[0.1em] transition-all rounded-full flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed group/btn hover:shadow-neon-cyan/50 active:scale-95 transition-all outline-none"
           >
             {loading ? (
               <Loader2 className="w-6 h-6 animate-spin" />
             ) : (
               <>
                 AUTHENTICATE
-                <ArrowRight className="w-5 h-5 group-hover/btn:translate-x-1 transition-transform" />
+                <ArrowRight className="w-7 h-7 group-hover/btn:translate-x-1 transition-transform" />
               </>
             )}
           </button>
         </form>
       </div>
+      <div className="mt-1 flex flex-col items-center gap-16 relative z-10">
+        <div className="flex items-center gap-3 text-[10px] font-jetbrains text-whapigen-green tracking-[0.4em] font-black uppercase bg-whapigen-green/5 px-6 py-2 rounded-full border border-whapigen-green/20">
+          <span className="w-2 h-2 rounded-full bg-whapigen-green shadow-neon-green animate-pulse"></span>
+          ACTIVE SYSTEM ACCESS
+        </div>
+      </div>
 
       {/* Footer Meta */}
-      <footer className="mt-12 text-center relative z-10 opacity-30">
+      <footer className="mt-4 md:mt-12 text-center relative z-10 opacity-30">
         <p className="text-[9px] font-jetbrains text-whapigen-cyan tracking-[0.5em] uppercase font-black">
           SECURE CONNECTION ESTABLISHED
         </p>
       </footer>
+
+      <div className="mt-20 flex flex-col items-center pb-0 relative z-2">
+        <p className="text-[10px] text-center font-jetbrains text-white/70 tracking-[0.6em] uppercase font-black ml-[0.6em]">
+          POWERED BY <span className="text-vivid-gradient italic">WHAPIGEN</span> // AI AUTOMATION SYSTEMS
+        </p>
+      </div>
     </div>
   );
 }
