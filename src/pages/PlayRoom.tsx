@@ -1866,6 +1866,8 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
           const voteCount = votes.filter(v => v.target_id === p.id).length;
           const isMe = p.id === studentData?.playerId;
 
+          const thisPlayerVoted = votes.some((v: any) => v.voter_id === p.id);
+
           return (
             <div
               key={p.id}
@@ -1877,9 +1879,18 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
                   <Users className="w-4 h-4 md:w-6 md:h-6 text-whapigen-cyan/20 group-hover/card:text-whapigen-cyan transition-colors" />
                 </div>
                 <p className="text-white font-sora tracking-tighter font-black uppercase text-xl md:text-2xl group-hover/card:text-whapigen-cyan transition-colors">{p.nickname}</p>
+
                 {isTeacher && (
-                  <div className="flex flex-col items-center gap-2 md:gap-4 mt-4 w-full">
-                    <span className="text-white font-black font-jetbrains text-xs tracking-[0.1em] uppercase md:px-6 px-2 py-1 md:py-2 rounded-full border border-white/5 bg-white/5">
+                  <div className="flex flex-col items-center gap-2 md:gap-4 mt-2 w-full">
+                    {/* --- INDICADOR DE ESTADO DE VOTO (Solo para Admin y jugadores válidos) --- */}
+                    {!p.is_host && !p.is_eliminated && (
+                      <span className={`font-jetbrains text-[9px] tracking-widest uppercase ${thisPlayerVoted ? 'text-whapigen-cyan' : 'text-whapigen-red animate-pulse'}`}>
+                        {thisPlayerVoted ? 'VOTED' : 'PENDING'}
+                      </span>
+                    )}
+                    {/* ------------------------------------------------------------------------ */}
+
+                    <span className="text-white font-black font-jetbrains text-xs tracking-[0.1em] uppercase px-2 py-1 md:py-2 rounded-full border border-white/5 bg-white/5">
                       Votes: {voteCount}
                     </span>
                     <button
@@ -1900,13 +1911,14 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
                       }}
                       className="relative z-[9999] pointer-events-auto text-whapigen-red/70 hover:text-white transition-all bg-white/5 hover:bg-whapigen-red border border-white/10 hover:border-whapigen-red md:px-4 px-0 py-1 rounded-full text-[9px] font-black tracking-[0.4em] w-full uppercase"
                     >
-                      Kick System
+                      Kick Player
                     </button>
                   </div>
                 )}
               </div>
 
-              {!isTeacher && !isMe && !isSpectator && (
+              {/* ¡AQUÍ ESTÁ EL CAMBIO! Agregamos !hasVoted a la condición */}
+              {!isTeacher && !isMe && !isSpectator && !hasVoted && (
                 <div className="w-full mt-4">
                   <button
                     onClick={(e) => {
@@ -1914,11 +1926,10 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
                       console.log('🛑 DOM CLICK DETECTADO en jugador:', p.id);
                       handleVote(p.id);
                     }}
-                    disabled={hasVoted}
-                    className={`relative z-50 pointer-events-auto w-full font-sora text-[11px] tracking-[0.4em] py-2 rounded-3xl transition-all font-black uppercase shadow-[0_8px_0_#4c1d95] ${hasVoted ? 'bg-white/5 text-white/10 border border-white/5 translate-y-2 shadow-none cursor-default' : 'bg-gradient-to-br from-purple-600 to-purple-800 text-white border-t border-purple-400/30 hover:-translate-y-1 hover:shadow-neon-pulse-violet active:translate-y-2 active:shadow-none'}`}
+                    className="relative z-50 pointer-events-auto w-full font-sora text-[11px] tracking-[0.4em] py-2 rounded-3xl transition-all font-black uppercase shadow-[0_8px_0_#4c1d95] bg-gradient-to-br from-purple-600 to-purple-800 text-white border-t border-purple-400/30 hover:-translate-y-1 hover:shadow-neon-pulse-violet active:translate-y-2 active:shadow-none"
                     style={{ transform: 'translateZ(0)' }}
                   >
-                    <span style={{ pointerEvents: 'none' }}>{hasVoted ? 'Voted' : 'VOTE'}</span>
+                    <span style={{ pointerEvents: 'none' }}>VOTE</span>
                   </button>
                 </div>
               )}
@@ -1959,7 +1970,7 @@ function EliminationAnnouncement({ info }: { info: any }) {
         {info.nickname} WAS ELIMINATED
       </h3>
       <p className="font-jetbrains tracking-[0.3em] text-white/70 uppercase mt-4 text-xs">
-        {info.wasImpostor ? 'THEY WERE AN IMPOSTOR' : 'THEY WERE NOT THE IMPOSTOR'}
+        {info.wasImpostor ? 'WAS AN IMPOSTOR' : 'WAS NOT THE IMPOSTOR'}
       </p>
     </div>
   );
@@ -2118,13 +2129,11 @@ function PersistentWordBar({ role, secretWord, hintsEnabled, hints }: {
 }) {
   const [revealed, setRevealed] = useState(false);
   const [canReceiveIntel, setCanReceiveIntel] = useState(false);
-  const [intelRevealed, setIntelRevealed] = useState(false);
 
   // ── IMPOSTOR HINT: Immediate access, no timer ──
   useEffect(() => {
     if (role !== 'IMPOSTOR' || !hintsEnabled || !hints) {
       setCanReceiveIntel(false);
-      setIntelRevealed(false);
       return;
     }
     setCanReceiveIntel(true);
@@ -2144,29 +2153,20 @@ function PersistentWordBar({ role, secretWord, hintsEnabled, hints }: {
       ) : (
         role === 'IMPOSTOR' ? (
           <div className="flex flex-col items-center gap-1 animate-in slide-in-from-top duration-500">
-            <div className="flex items-center gap-2 md:gap-4 md:tracking-[0.1em] font-black text-xs md:text-lg w-max max-w-[80vw] md:max-w-none bg-whapigen-red/10 px-4 md:px-10 py-1 rounded-full border border-whapigen-red/20 whitespace-normal text-center">
-              <EyeOff className="w-4 h-4 md:w-4 md:h-4 shrink-0 text-whapigen-red shadow-neon-red shadow-[0_0_15px_#ff3131]" />
-              <span className="text-whapigen-red shadow-neon-red">YOU ARE THE IMPOSTOR</span>
-            </div>
-            {/* ── IMPOSTOR HINT: "RECEIVE INTEL" toggle appears after 10s ── */}
-            {canReceiveIntel && hints && (
-              <button
-                onClick={(e) => { e.stopPropagation(); setIntelRevealed(prev => !prev); }}
-                className={`flex items-center gap-2 tracking-[0.2em] text-xs md:text-lg font-bold px-2 py-2 rounded-full border transition-all cursor-pointer hover:scale-105 animate-in fade-in slide-in-from-bottom duration-700 ${intelRevealed
-                  ? 'text-purple-300 bg-purple-600/30 border-purple-500/50 shadow-[0_0_20px_rgba(147,51,234,0.3)]'
-                  : 'text-purple-400 bg-purple-600/20 hover:bg-purple-600/40 border-purple-500/30 hover:shadow-[0_0_20px_rgba(147,51,234,0.3)]'
-                  }`}
-              >
-                <Crosshair className="w-3 h-3" />
-                <span key={intelRevealed ? 'hide-intel' : 'receive-intel'}>{intelRevealed ? 'HIDE HINT' : 'HINT'}</span>
-              </button>
-            )}
-            {intelRevealed && hints && (
-              <div className="flex items-center gap-2 tracking-[0.2em] text-xs md:text-xs font-bold text-purple-400/90 bg-purple-600/10 px-2 py-1.5 rounded-full border border-purple-500/20 animate-in fade-in slide-in-from-bottom duration-700">
-                <span className="text-purple-500/50">HINT:</span>
-                <span>{hints[0]}</span>
+            <div className="flex flex-col items-center gap-1 animate-in slide-in-from-top duration-500">
+              <div className="flex items-center gap-2 md:gap-4 md:tracking-[0.1em] font-black text-xs md:text-lg w-max max-w-[80vw] md:max-w-none bg-whapigen-red/10 px-4 md:px-10 py-1 rounded-full border border-whapigen-red/20 whitespace-normal text-center">
+                <EyeOff className="w-4 h-4 md:w-4 md:h-4 shrink-0 text-whapigen-red shadow-neon-red shadow-[0_0_15px_#ff3131]" />
+                <span className="text-whapigen-red shadow-neon-red">YOU ARE THE IMPOSTOR</span>
               </div>
-            )}
+
+              {/* Ahora la pista se muestra automáticamente si canReceiveIntel es true */}
+              {canReceiveIntel && hints && (
+                <div className="flex items-center gap-2 tracking-[0.2em] text-xs md:text-xs font-bold text-purple-400/90 bg-purple-600/10 px-2 py-1.5 rounded-full border border-purple-500/20 animate-in fade-in slide-in-from-bottom duration-700">
+                  <span className="text-purple-500/50">HINT:</span>
+                  <span>{hints[0]}</span>
+                </div>
+              )}
+            </div>
           </div>
         ) : (
           <div className="flex items-center gap-1 md:gap-2 tracking-[0.1em] md:tracking-[0.2em] text-lg md:text-lg w-max max-w-[80vw] md:max-w-none bg-whapigen-cyan/10 px-4 py-1 rounded-full border border-whapigen-cyan/20 whitespace-normal text-center">
