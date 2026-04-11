@@ -197,7 +197,7 @@ export default function JoinScreen() {
                 </>
               ) : (
                 <>
-                  INITIALIZE LINK <ArrowRight className="w-6 h-6 group-hover/btn:translate-x-3 transition-transform" />
+                  ENTER ROOM <ArrowRight className="w-6 h-6 group-hover/btn:translate-x-3 transition-transform" />
                 </>
               )}
             </span>
