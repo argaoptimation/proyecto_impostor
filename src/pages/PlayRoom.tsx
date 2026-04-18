@@ -479,7 +479,7 @@ export default function PlayRoom() {
               <div className="w-1 h-6 bg-gradient-to-b from-whapigen-cyan to-purple-600 opacity-30"></div>
             </div>
             <div className="flex flex-col gap-2">
-              <h1 className="text-header-premium text-2xl tracking-[0.1em]">
+              <h1 className="text-header-premium text-2xl text-center md:text-left tracking-[0.1em]">
                 {room.code}
               </h1>
               <div className="flex items-center gap-2 flex-wrap justify-center md:justify-start">

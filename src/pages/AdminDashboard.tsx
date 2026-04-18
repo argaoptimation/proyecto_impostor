@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { LogOut, Plus, Users, Play, Clock, Hash, Loader2, Trash2, ArrowRight, Target, ShieldCheck, ChevronDown } from 'lucide-react';
+import { LogOut, Plus, Users, Play, Clock, Hash, Loader2, Trash2, ArrowRight, Target, ShieldCheck, ChevronDown, Cpu } from 'lucide-react';
 import { GlitchLogo } from '../components/ui/GlitchLogo';
 import { CyberRain } from '../components/ui/CyberRain';
 import { RainToggle } from '../components/ui/RainToggle';
@@ -12,7 +12,7 @@ function GameSelect({ label, value, onChange, options }: { label: string, value:
   const [isOpen, setIsOpen] = useState(false);
   return (
     <div className="relative">
-      <label className="block text-[10px] font-jetbrains text-whapigen-cyan/50 mb-3 uppercase tracking-[0.4em] pl-2 font-black">
+      <label className="block text-[10px] font-jetbrains text-whapigen-cyan/80 mb-3 uppercase tracking-[0.3em] pl-2 font-black">
         {label}
       </label>
       <button
@@ -247,18 +247,18 @@ export default function AdminDashboard() {
             />
 
             {/* AI MODE TOGGLE */}
-            <div className="space-y-4 mt-6">
-              <label className="block text-[9px] font-jetbrains text-whapigen-cyan/50 uppercase tracking-[0.4em] pl-2 font-black">
+            <div className="space-y-2 md:space-y-4 mt-6">
+              <label className="block text-[10px] font-jetbrains text-whapigen-cyan/80 uppercase tracking-[0.3em] pl-2 font-black">
                 Intelligence Source
               </label>
               <div
                 onClick={() => setUseBookBank(!useBookBank)}
-                className={`group relative flex items-center justify-between p-6 rounded-[30px] border transition-all cursor-pointer backdrop-blur-xl ${useBookBank
+                className={`group relative flex items-center justify-between p-4 rounded-[30px] border transition-all cursor-pointer backdrop-blur-xl ${useBookBank
                   ? 'bg-whapigen-cyan/10 border-whapigen-cyan/40 shadow-neon-cyan/10'
                   : 'bg-black/40 border-white/5 hover:border-white/10'
                   }`}
               >
-                <div className="flex flex-col items-start gap-1">
+                <div className="flex flex-col items-start gap-0">
                   <span className="font-sora text-[14px] text-white font-black tracking-widest uppercase">
                     {useBookBank ? 'AI BOOK' : 'GENERAL AI'}
                   </span>
@@ -274,7 +274,7 @@ export default function AdminDashboard() {
 
 
             <div>
-              <label className="block text-[9px] font-jetbrains text-whapigen-cyan/50 mb-3 uppercase tracking-[0.4em] pl-2 font-black">
+              <label className="block text-[10px] font-jetbrains text-whapigen-cyan/80 mb-1 uppercase tracking-[0.3em] pl-2 font-black">
                 MISSION THEME (OPTIONAL)
               </label>
               <input
@@ -282,13 +282,13 @@ export default function AdminDashboard() {
                 value={customTheme}
                 onChange={(e) => setCustomTheme(e.target.value)}
                 placeholder="e.g. Technology, Sports, Vacations..."
-                className="w-full bg-black/40 border border-white/5 rounded-2xl p-5 text-white font-jetbrains text-[13px] tracking-wider focus:border-whapigen-cyan/50 focus:shadow-[0_0_20px_rgba(0,240,255,0.1)] outline-none transition-all placeholder:text-white/20"
+                className="w-full bg-black/40 border border-white/5 rounded-2xl p-2 text-white font-jetbrains text-[13px] tracking-wider focus:border-whapigen-cyan/50 focus:shadow-[0_0_20px_rgba(0,240,255,0.1)] outline-none transition-all placeholder:text-white/20"
               />
             </div>
 
 
             <div>
-              <label className="block text-[10px] font-jetbrains text-whapigen-cyan/50 mb-2 uppercase tracking-[0.4em] pl-2 font-black">
+              <label className="block text-[10px] font-jetbrains text-whapigen-cyan/80 mb-2 uppercase tracking-[0.3em] pl-2 font-black">
                 Hints
               </label>
               <button
@@ -320,7 +320,7 @@ export default function AdminDashboard() {
           </button>
         </div>
 
-        <div className="md:col-span-2 bg-black/40 backdrop-blur-xl border border-white/5 rounded-[40px] p-4 md:p-12 flex flex-col gap-10 shadow-2xl relative overflow-x-hidden group/missions animate-in slide-in-from-right duration-700">
+        <div className="md:col-span-2 bg-black/40 backdrop-blur-xl border border-white/5 rounded-[40px] p-4 md:p-8 flex flex-col gap-4 shadow-2xl relative overflow-x-hidden group/missions animate-in slide-in-from-right duration-700">
           <div className="absolute top-0 left-0 w-2 h-full bg-gradient-to-b from-purple-600 to-whapigen-cyan blur-sm opacity-30 group-hover/missions:opacity-70 transition-opacity"></div>
           <h2 className="text-xs font-black font-jetbrains text-white flex items-center gap-2 md:gap-4 tracking-[0.4em] uppercase mb-0 md:mb-2">
             <Users className="w-5 h-5 text-purple-500" /> Active Missions
@@ -340,31 +340,39 @@ export default function AdminDashboard() {
               NO ACTIVE MISSIONS DETECTED
             </div>
           ) : (
-            <div className="grid gap-6 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
+            <div className="grid gap-2 max-h-[120vh] overflow-y-auto pr-2 custom-scrollbar">
               {rooms.map((room) => (
                 <div key={room.id} className="flex flex-col md:flex-row md:justify-between items-start md:items-center gap-4 md:gap-0 p-3 md:p-8 w-full bg-white/5 border border-white/5 hover:border-purple-500/30 hover:shadow-[0_0_40px_rgba(147,51,234,0.1)] transition-all group/item rounded-[30px] backdrop-blur-2xl relative overflow-x-hidden">
                   <div className="absolute inset-0 bg-gradient-to-r from-whapigen-cyan/5 to-purple-600/5 opacity-0 group-hover/item:opacity-100 transition-opacity"></div>
                   <div className="relative z-10">
                     <div className="flex items-center justify-center md:justify-start gap-10 md:gap-6 w-full">
-                      <span className="text-4xl font-black text-white font-sora tracking-tighter group-hover/item:text-whapigen-cyan transition-colors">{room.code}</span>
+                      <span className="text-2xl md:text-4xl font-black text-white font-sora tracking-tighter group-hover/item:text-whapigen-cyan transition-colors">{room.code}</span>
                     </div>
 
-                    <div className="flex flex-col gap-2 mt-4">
-                      <div className="flex justify-center md:justify-start gap-6 w-full">
-                        <p className="text-[14px] text-gray-500 font-jetbrains flex items-center gap-2 uppercase tracking-[0.2em] font-bold">
+                    <div className="flex flex-col gap-2 mt-0 md:mt-2">
+                      <div className="flex flex-wrap items-center justify-center md:justify-start gap-x-6 gap-y-2 mt-0 w-full">
+                        {/* TIEMPO */}
+                        <p className="text-[14px] text-gray-500 font-jetbrains flex items-center gap-2 uppercase tracking-[0.2em] font-bold whitespace-nowrap">
                           <Clock className="w-3.5 h-3.5 text-whapigen-cyan/40" /> {room.turn_duration}s
                         </p>
-                        <p className="text-[14px] text-gray-500 font-jetbrains flex items-center gap-2 uppercase tracking-[0.2em] font-bold">
+
+                        {/* NIVEL */}
+                        <p className="text-[14px] text-gray-500 font-jetbrains flex items-center gap-2 uppercase tracking-[0.2em] font-bold whitespace-nowrap">
                           <Hash className="w-3.5 h-3.5 text-purple-500/40" /> {room.level}
                         </p>
-                      </div>
 
-                      {/* MOSTRAR TEMÁTICA SI EXISTE */}
-                      {room.theme && (
-                        <p className="text-[12px] text-whapigen-cyan/60 font-jetbrains flex items-center gap-2 uppercase tracking-[0.3em] font-black">
-                          <Target className="w-3 h-3" /> THEME: {room.theme}
+                        {/* INDICADOR DE MODO AI */}
+                        <p className="text-[12px] text-purple-400/80 font-jetbrains flex items-center gap-2 uppercase tracking-[0.3em] font-black whitespace-nowrap">
+                          <Cpu className="w-3 h-3" /> AI MODE: {room.use_book_bank ? 'AI BOOK' : 'GENERAL AI'}
                         </p>
-                      )}
+
+                        {/* TEMÁTICA */}
+                        {room.theme && (
+                          <p className="text-[12px] text-whapigen-cyan/60 font-jetbrains flex items-center gap-2 uppercase tracking-[0.3em] font-black whitespace-nowrap">
+                            <Target className="w-3 h-3" /> THEME: {room.theme}
+                          </p>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <div className="relative z-10 flex items-center gap-4 w-full md:w-auto justify-center md:justify-end">
