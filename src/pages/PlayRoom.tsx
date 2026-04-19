@@ -19,6 +19,7 @@ export default function PlayRoom() {
   const { room, players, gameState, loading, setActiveRoomId } = useGame();
   const { user, studentData, setStudentData, loading: authLoading } = useAuth();
 
+
   // ══════════════════════════════════════════════════════════════════════════
   // SECTION 1: ALL HOOKS — must be above any conditional return
   // ══════════════════════════════════════════════════════════════════════════
@@ -672,6 +673,21 @@ function PhaseLobby({ isTeacher, roomId, players, roomLevel }: { isTeacher: bool
   const { refreshPlayers } = useGame(); // Keep hook call alive for context subscription
   const [startError, setStartError] = useState<string | null>(null);
 
+  // --- ANTI-SPAM: Rate limiting para proteger tokens de Gemini ---
+  const clickHistory = useRef<number[]>([]);
+  const [cooldown, setCooldown] = useState(0);
+  const [isStarting, setIsStarting] = useState(false);
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setInterval>;
+    if (cooldown > 0) {
+      timer = setInterval(() => {
+        setCooldown((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [cooldown]);
+
   useEffect(() => {
     const errorMsg = sessionStorage.getItem('lobby_error');
     if (errorMsg) {
@@ -684,187 +700,216 @@ function PhaseLobby({ isTeacher, roomId, players, roomLevel }: { isTeacher: bool
   const canStart = (players?.length || 0) >= 3;
 
   const startGame = async () => {
-    // ── FIX 1: STRICT GUARD ──
-    if (players.length < 3) return;
+    // ── LÓGICA ANTI-SPAM / TOKEN PROTECTION ──
+    const now = Date.now();
+    const TIME_WINDOW = 15000; // 15 segundos
+    const MAX_CLICKS = 5;      // Máximo 5 intentos por ventana
 
-    // ── LIVE VALIDATION: re-fetch directly from DB, never trust stale state ──
-    const { data: livePlayers } = await supabase
-      .from('players')
-      .select('id, nickname')
-      .eq('room_id', roomId)
-      .eq('is_host', false);
+    clickHistory.current = clickHistory.current.filter((time: number) => now - time < TIME_WINDOW);
 
-    if (!livePlayers || livePlayers.length < 3) {
-      setStartError(`MISSION STANDBY: WAITING FOR REINFORCEMENTS`);
+    if (clickHistory.current.length >= MAX_CLICKS) {
+      console.warn('⚠️ ANTI-SPAM: Límite de intentos alcanzado. Bloqueando por 15 segundos.');
+      setCooldown(15);
       return;
     }
-    setStartError(null);
 
+    clickHistory.current.push(now);
 
-    // ── SCALABLE IMPOSTOR COUNT & ROUNDS ──
-    const n = livePlayers.length;
-    let impostorCount = 1;
-    let maxRounds = 3; // Rondas por defecto para 1 impostor
-
-    if (n >= 12) {
-      impostorCount = 3;
-      maxRounds = 5; // <--- 4 rondas para 3 impostores (Fácil de cambiar a 5)
-    } else if (n >= 6) {
-      impostorCount = 2;
-      maxRounds = 4; // <--- Si a futuro querés 4 rondas para 2 impostores, lo cambiás acá nomás
+    if (isStarting) {
+      console.warn('⚠️ ANTI-SPAM: Partida ya en progreso. Ignorando clic duplicado.');
+      return;
     }
 
-    // Safety: never assign more impostors than (playerCount - 1)
-    impostorCount = Math.min(impostorCount, n - 1);
+    // ── STRICT GUARD ──
+    if (players.length < 3) {
+      console.warn('startGame abortado: menos de 3 jugadores en estado local.');
+      return;
+    }
 
-    console.log(`[Role Allocator] Allocating ${impostorCount} IMPOSTOR(s) for ${n} player(s). Rounds: ${maxRounds}`);
-
-    // ── ANTI-REPEAT RING: track how many times each player has been impostor ──
-    // Stored as a JSON map { [playerId]: consecutiveRoundCount } in localStorage.
-    const historyKey = `impostor_history_${roomId}`;
-    let history: Record<string, number> = {};
+    setIsStarting(true);
     try {
-      const raw = localStorage.getItem(historyKey);
-      if (raw) history = JSON.parse(raw);
-    } catch (_) { history = {}; }
 
-    // Build candidate pool: exclude players who've been impostor 2+ consecutive rounds
-    const candidates = livePlayers.filter(p => (history[p.id] || 0) < 2);
-    const candidatePool = candidates.length >= impostorCount ? candidates : livePlayers;
+      // ── LIVE VALIDATION: re-fetch directly from DB, never trust stale state ──
+      const { data: livePlayers } = await supabase
+        .from('players')
+        .select('id, nickname')
+        .eq('room_id', roomId)
+        .eq('is_host', false);
 
-    // ── WEIGHTED LOTTERY: Impostor selection ──────────────────────────────────
-    // Frecuencia de impostores
-    // FIRST_PLAYER_IMPOSTOR_WEIGHT controls how likely index-0 of the DB result
-    // is to become impostor relative to everyone else:
-    //   1.0 → same odds as any other player (normal)
-    //   0.5 → half the odds (reduced bias fix)
-    //   0.0 → impossible to be impostor
-    const FIRST_PLAYER_IMPOSTOR_WEIGHT = 0.5;
-
-    // Weighted random draw (cumulative CDF approach — unbiased):
-    const weights = candidatePool.map((_, idx) => idx === 0 ? FIRST_PLAYER_IMPOSTOR_WEIGHT : 1);
-    const totalWeight = weights.reduce((a, b) => a + b, 0);
-
-    const impostorIds = new Set<string>();
-    const remaining = [...candidatePool]; // mutable pool so we don't pick the same player twice
-    const remainingWeights = [...weights];
-
-    for (let pick = 0; pick < impostorCount; pick++) {
-      const total = remainingWeights.reduce((a, b) => a + b, 0);
-      let rand = Math.random() * total;
-      let chosen = 0;
-      for (let i = 0; i < remaining.length; i++) {
-        rand -= remainingWeights[i];
-        if (rand <= 0) { chosen = i; break; }
-      }
-      impostorIds.add(remaining[chosen].id);
-      remaining.splice(chosen, 1);
-      remainingWeights.splice(chosen, 1);
-    }
-    console.log(`[Role Allocator] FIRST_PLAYER_IMPOSTOR_WEIGHT=${FIRST_PLAYER_IMPOSTOR_WEIGHT}, totalWeight=${totalWeight.toFixed(2)}, impostors:`, [...impostorIds]);
-
-    // Update history: +1 for impostors, reset to 0 for natives
-    const newHistory: Record<string, number> = {};
-    for (const p of livePlayers) {
-      newHistory[p.id] = impostorIds.has(p.id) ? (history[p.id] || 0) + 1 : 0;
-    }
-    localStorage.setItem(historyKey, JSON.stringify(newHistory));
-
-    // 1. Buscamos used_words en la tabla ROOMS (que es donde debe vivir para no borrarse)
-    const { data: roomData } = await supabase
-      .from('rooms')
-      .select('used_words')
-      .eq('id', roomId)
-      .single();
-
-    // 2. Buscamos theme y use_book_bank en la tabla game_state
-    const { data: dbState } = await supabase
-      .from('game_state')
-      .select('theme, use_book_bank')
-      .eq('room_id', roomId)
-      .single();
-
-    const previousWords = roomData?.used_words || [];
-
-    let finalWord = '???';
-    let finalHint = '';
-
-    // 3. Generamos la palabra con Gemini usando los 4 argumentos
-    try {
-      const aiResult = await generateGameWord(
-        roomLevel,
-        dbState?.theme || null,
-        dbState?.use_book_bank || false,
-        previousWords
-      );
-
-      // --- NUEVO: CORTE SI NO HAY MATCH EN EL LIBRO ---
-      if (aiResult && aiResult.word === "ERROR_NO_MATCH") {
-        setStartError("MISSION ABORTED: NO WORDS FOUND FOR THIS THEME IN THE BOOK.");
+      if (!livePlayers || livePlayers.length < 3) {
+        setStartError(`MISSION STANDBY: WAITING FOR REINFORCEMENTS`);
         return;
       }
-      // ------------------------------------------------
+      setStartError(null);
 
-      if (aiResult && aiResult.word) {
-        finalWord = aiResult.word;
-        finalHint = aiResult.hint || '';
-      } else {
-        throw new Error("Gemini no devolvió una palabra válida");
+
+      // ── SCALABLE IMPOSTOR COUNT & ROUNDS ──
+      const n = livePlayers.length;
+      let impostorCount = 1;
+      let maxRounds = 3; // Rondas por defecto para 1 impostor
+
+      if (n >= 12) {
+        impostorCount = 3;
+        maxRounds = 5; // <--- 4 rondas para 3 impostores (Fácil de cambiar a 5)
+      } else if (n >= 6) {
+        impostorCount = 2;
+        maxRounds = 4; // <--- Si a futuro querés 4 rondas para 2 impostores, lo cambiás acá nomás
       }
-    } catch (error) {
-      // 3. FALLBACK: Si Gemini falla
-      console.warn("⚠️ Fallo en Gemini, usando banco local...");
-      finalWord = getRandomWordEntry(roomLevel).word;
-      finalHint = '???'; // Pista genérica de emergencia
+
+      // Safety: never assign more impostors than (playerCount - 1)
+      impostorCount = Math.min(impostorCount, n - 1);
+
+      console.log(`[Role Allocator] Allocating ${impostorCount} IMPOSTOR(s) for ${n} player(s). Rounds: ${maxRounds}`);
+
+      // ── ANTI-REPEAT RING: track how many times each player has been impostor ──
+      // Stored as a JSON map { [playerId]: consecutiveRoundCount } in localStorage.
+      const historyKey = `impostor_history_${roomId}`;
+      let history: Record<string, number> = {};
+      try {
+        const raw = localStorage.getItem(historyKey);
+        if (raw) history = JSON.parse(raw);
+      } catch (_) { history = {}; }
+
+      // Build candidate pool: exclude players who've been impostor 2+ consecutive rounds
+      const candidates = livePlayers.filter(p => (history[p.id] || 0) < 2);
+      const candidatePool = candidates.length >= impostorCount ? candidates : livePlayers;
+
+      // ── WEIGHTED LOTTERY: Impostor selection ──────────────────────────────────
+      // Frecuencia de impostores
+      // FIRST_PLAYER_IMPOSTOR_WEIGHT controls how likely index-0 of the DB result
+      // is to become impostor relative to everyone else:
+      //   1.0 → same odds as any other player (normal)
+      //   0.5 → half the odds (reduced bias fix)
+      //   0.0 → impossible to be impostor
+      const FIRST_PLAYER_IMPOSTOR_WEIGHT = 0.5;
+
+      // Weighted random draw (cumulative CDF approach — unbiased):
+      const weights = candidatePool.map((_, idx) => idx === 0 ? FIRST_PLAYER_IMPOSTOR_WEIGHT : 1);
+      const totalWeight = weights.reduce((a, b) => a + b, 0);
+
+      const impostorIds = new Set<string>();
+      const remaining = [...candidatePool]; // mutable pool so we don't pick the same player twice
+      const remainingWeights = [...weights];
+
+      for (let pick = 0; pick < impostorCount; pick++) {
+        const total = remainingWeights.reduce((a, b) => a + b, 0);
+        let rand = Math.random() * total;
+        let chosen = 0;
+        for (let i = 0; i < remaining.length; i++) {
+          rand -= remainingWeights[i];
+          if (rand <= 0) { chosen = i; break; }
+        }
+        impostorIds.add(remaining[chosen].id);
+        remaining.splice(chosen, 1);
+        remainingWeights.splice(chosen, 1);
+      }
+      console.log(`[Role Allocator] FIRST_PLAYER_IMPOSTOR_WEIGHT=${FIRST_PLAYER_IMPOSTOR_WEIGHT}, totalWeight=${totalWeight.toFixed(2)}, impostors:`, [...impostorIds]);
+
+      // Update history: +1 for impostors, reset to 0 for natives
+      const newHistory: Record<string, number> = {};
+      for (const p of livePlayers) {
+        newHistory[p.id] = impostorIds.has(p.id) ? (history[p.id] || 0) + 1 : 0;
+      }
+      localStorage.setItem(historyKey, JSON.stringify(newHistory));
+
+      // 1. Buscamos used_words en la tabla ROOMS (que es donde debe vivir para no borrarse)
+      const { data: roomData } = await supabase
+        .from('rooms')
+        .select('used_words')
+        .eq('id', roomId)
+        .single();
+
+      // 2. Buscamos theme y use_book_bank en la tabla game_state
+      const { data: dbState } = await supabase
+        .from('game_state')
+        .select('theme, use_book_bank')
+        .eq('room_id', roomId)
+        .single();
+
+      const previousWords = roomData?.used_words || [];
+
+      let finalWord = '???';
+      let finalHint = '';
+
+      // 3. Generamos la palabra con Gemini usando los 4 argumentos
+      try {
+        const aiResult = await generateGameWord(
+          roomLevel,
+          dbState?.theme || null,
+          dbState?.use_book_bank || false,
+          previousWords
+        );
+
+        // --- NUEVO: CORTE SI NO HAY MATCH EN EL LIBRO ---
+        if (aiResult && aiResult.word === "ERROR_NO_MATCH") {
+          setStartError("MISSION ABORTED: NO WORDS FOUND FOR THIS THEME IN THE BOOK.");
+          return;
+        }
+        // ------------------------------------------------
+
+        if (aiResult && aiResult.word) {
+          finalWord = aiResult.word;
+          finalHint = aiResult.hint || '';
+        } else {
+          throw new Error("La IA no devolvió una palabra válida");
+        }
+      } catch (error) {
+        // 3. FALLBACK: Si Gemini falla
+        console.warn("⚠️ Fallo en la IA, usando banco local...");
+        finalWord = getRandomWordEntry(roomLevel).word;
+        finalHint = '???'; // Pista genérica de emergencia
+      }
+
+      const updatedUsedWords = [...previousWords, finalWord];
+
+      // 4. HACEMOS EL UPDATE DE LA LISTA DE PALABRAS EN LA TABLA ROOMS
+      await supabase
+        .from('rooms')
+        .update({ used_words: updatedUsedWords })
+        .eq('id', roomId);
+
+      // ── DISTRIBUTE ROLES AND INITIAL TURN ORDER ──
+      // Fisher-Yates shuffle: guarantees a perfectly uniform distribution.
+      // `.sort(() => Math.random() - 0.5)` is NOT uniform — each element's
+      // final position depends on how many comparisons it wins, which varies.
+      const shuffledForOrder = [...livePlayers];
+      for (let i = shuffledForOrder.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffledForOrder[i], shuffledForOrder[j]] = [shuffledForOrder[j], shuffledForOrder[i]];
+      }
+      const turnOrderMap = new Map(shuffledForOrder.map((p, i) => [p.id, i]));
+
+      const roleUpdates = livePlayers.map(p => {
+        const isImpostor = impostorIds.has(p.id);
+        return supabase.from('players').update({
+          role: isImpostor ? 'IMPOSTOR' : 'CITIZEN',
+          secret_word: isImpostor ? null : finalWord,
+          is_eliminated: false,
+          turn_order: turnOrderMap.get(p.id)
+        }).eq('id', p.id);
+      });
+
+      await Promise.all(roleUpdates);
+      console.log('[Role Allocator] Roles and secret_words distributed independently.');
+
+      // Wipe any stale votes from a previous round before entering
+      await supabase.from('votes').delete().eq('room_id', roomId);
+
+      // Pick first speaker based on turn_order 0
+      const firstPlayer = shuffledForOrder[0];
+      console.warn('📝 DB WRITE - Cambiando game_state:', { nuevaFase: 'ROLE_REVEAL', disparadoPor: 'startGame' });
+      await supabase.from('game_state').update({
+        phase: 'ROLE_REVEAL',
+        secret_word: finalWord,
+        secret_hint: finalHint,
+        current_turn_player_id: firstPlayer.id,
+        current_turn_index: 0,
+        current_round: 1,
+        max_rounds: maxRounds
+      }).eq('room_id', roomId);
+    } finally {
+      setIsStarting(false);
     }
-
-    const updatedUsedWords = [...previousWords, finalWord];
-
-    // 4. HACEMOS EL UPDATE DE LA LISTA DE PALABRAS EN LA TABLA ROOMS
-    await supabase
-      .from('rooms')
-      .update({ used_words: updatedUsedWords })
-      .eq('id', roomId);
-
-    // ── DISTRIBUTE ROLES AND INITIAL TURN ORDER ──
-    // Fisher-Yates shuffle: guarantees a perfectly uniform distribution.
-    // `.sort(() => Math.random() - 0.5)` is NOT uniform — each element's
-    // final position depends on how many comparisons it wins, which varies.
-    const shuffledForOrder = [...livePlayers];
-    for (let i = shuffledForOrder.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffledForOrder[i], shuffledForOrder[j]] = [shuffledForOrder[j], shuffledForOrder[i]];
-    }
-    const turnOrderMap = new Map(shuffledForOrder.map((p, i) => [p.id, i]));
-
-    const roleUpdates = livePlayers.map(p => {
-      const isImpostor = impostorIds.has(p.id);
-      return supabase.from('players').update({
-        role: isImpostor ? 'IMPOSTOR' : 'CITIZEN',
-        secret_word: isImpostor ? null : finalWord,
-        is_eliminated: false,
-        turn_order: turnOrderMap.get(p.id)
-      }).eq('id', p.id);
-    });
-
-    await Promise.all(roleUpdates);
-    console.log('[Role Allocator] Roles and secret_words distributed independently.');
-
-    // Wipe any stale votes from a previous round before entering
-    await supabase.from('votes').delete().eq('room_id', roomId);
-
-    // Pick first speaker based on turn_order 0
-    const firstPlayer = shuffledForOrder[0];
-    console.warn('📝 DB WRITE - Cambiando game_state:', { nuevaFase: 'ROLE_REVEAL', disparadoPor: 'startGame' });
-    await supabase.from('game_state').update({
-      phase: 'ROLE_REVEAL',
-      secret_word: finalWord,
-      secret_hint: finalHint,
-      current_turn_player_id: firstPlayer.id,
-      current_turn_index: 0,
-      current_round: 1,
-      max_rounds: maxRounds // <--- ACÁ LE PASAMOS LA VARIABLE DINÁMICA
-    }).eq('room_id', roomId);
   };
 
   const [showBriefing, setShowBriefing] = useState(false);
@@ -972,10 +1017,21 @@ function PhaseLobby({ isTeacher, roomId, players, roomLevel }: { isTeacher: bool
           )}
           <button
             onClick={startGame}
-            disabled={!canStart}
-            className="mb-30 h-20 px-24 bg-gradient-to-r from-whapigen-cyan to-purple-600 hover:from-white hover:to-white text-black font-sora font-black tracking-[0.4em] transition-all disabled:opacity-30 disabled:cursor-not-allowed rounded-full w-full uppercase shadow-[0_15px_60px_rgba(0,240,255,0.3)] hover:shadow-neon-cyan/50 hover:-translate-y-1 active:translate-y-0"
+            disabled={!canStart || cooldown > 0 || isStarting}
+            className={`mb-30 h-20 px-24 font-sora font-black tracking-[0.4em] transition-all disabled:opacity-30 disabled:cursor-not-allowed rounded-full w-full uppercase ${cooldown > 0
+              ? 'bg-whapigen-red/20 text-whapigen-red border border-whapigen-red/50 shadow-none'
+              : 'bg-gradient-to-r from-whapigen-cyan to-purple-600 hover:from-white hover:to-white text-black shadow-[0_15px_60px_rgba(0,240,255,0.3)] hover:shadow-neon-cyan/50 hover:-translate-y-1 active:translate-y-0'
+              }`}
           >
-            <span style={{ pointerEvents: 'none' }}>{!canStart ? `LOCKED: ${players.length}/16 PLAYERS` : 'Start Mission'}</span>
+            <span style={{ pointerEvents: 'none' }}>
+              {cooldown > 0
+                ? `API LOCKED (${cooldown}s)`
+                : isStarting
+                  ? 'CONNECTING TO IA...'
+                  : !canStart
+                    ? `LOCKED: ${players.length}/16 PLAYERS`
+                    : 'Start Mission'}
+            </span>
           </button>
         </div>
       ) : (

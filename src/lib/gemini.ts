@@ -18,7 +18,7 @@ export async function generateGameWord(
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite-preview' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
 
     // 1. LÓGICA DE FILTRADO (DELEGADA A LA IA)
     let contextInstructions = "";
