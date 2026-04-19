@@ -280,7 +280,7 @@ export default function PlayRoom() {
       if (!isAbortingRef.current) {
         isAbortingRef.current = true;
         if (isTeacher) {
-          console.warn('📝 DB WRITE - LOBBY (Abortando: Quórum físico perdido, menos de 3 en la sala)');
+          // console.warn('📝 DB WRITE - LOBBY (Abortando: Quórum físico perdido, menos de 3 en la sala)');
           sessionStorage.setItem('lobby_error', 'MISSION ABORTED: INSUFFICIENT PLAYERS CONNECTED');
 
           supabase.from('game_state').update({
@@ -306,7 +306,7 @@ export default function PlayRoom() {
       if (!isAbortingRef.current) {
         isAbortingRef.current = true;
         if (isTeacher) {
-          console.warn('📝 DB WRITE - LOBBY (Impostor abandonó/fue expulsado)');
+          // console.warn('📝 DB WRITE - LOBBY (Impostor abandonó/fue expulsado)');
           sessionStorage.setItem('lobby_error', 'MISSION ABORTED: NO LIVING IMPOSTORS');
 
           supabase.from('game_state').update({
@@ -338,7 +338,7 @@ export default function PlayRoom() {
       if (impostorsAlive === 0 || nativesAlive <= impostorsAlive) {
         isAbortingRef.current = true;
         if (isTeacher) {
-          console.warn('📝 DB WRITE - RESULTS (Victoria detectada globalmente)');
+          // console.warn('📝 DB WRITE - RESULTS (Victoria detectada globalmente)');
           supabase.from('game_state').update({ phase: 'RESULTS' }).eq('room_id', room.id).then();
         }
       }
@@ -421,7 +421,7 @@ export default function PlayRoom() {
 
   const handleEndSession = async () => {
     if (isTeacher) {
-      console.warn('📝 ABORT MISSION MANUAL: Cancelando partida y volviendo al LOBBY');
+      // console.warn('📝 ABORT MISSION MANUAL: Cancelando partida y volviendo al LOBBY');
 
       // 1. Reiniciamos el estado del juego al Lobby
       await supabase.from('game_state').update({
@@ -536,7 +536,11 @@ export default function PlayRoom() {
           role={activePlayers.find(p => p.id === studentData?.playerId)?.role}
           secretWord={gameState.secret_word}
           hintsEnabled={!!room.hints_enabled}
-          hints={getHintsForWord(gameState.secret_word || '', room.level)}
+          hints={
+            gameState.secret_hint
+              ? [gameState.secret_hint, ""]
+              : getHintsForWord(gameState.secret_word || '', room.level)
+          }
         />
       )}
 
@@ -897,7 +901,7 @@ function PhaseLobby({ isTeacher, roomId, players, roomLevel }: { isTeacher: bool
 
       // Pick first speaker based on turn_order 0
       const firstPlayer = shuffledForOrder[0];
-      console.warn('📝 DB WRITE - Cambiando game_state:', { nuevaFase: 'ROLE_REVEAL', disparadoPor: 'startGame' });
+      // console.warn('📝 DB WRITE - Cambiando game_state:', { nuevaFase: 'ROLE_REVEAL', disparadoPor: 'startGame' });
       await supabase.from('game_state').update({
         phase: 'ROLE_REVEAL',
         secret_word: finalWord,
@@ -1132,8 +1136,11 @@ function PhaseReveal({ isTeacher, roomId, players }: { isTeacher: boolean, roomI
   const currentPlayer = players.find(p => p.id === studentData?.playerId);
   const role = currentPlayer?.role;
   const secretWord = gameState?.secret_word;
-  const hintsEnabled = !!room?.hints_enabled;
-  const hints = hintsEnabled && secretWord ? getHintsForWord(secretWord, room.level) : null;
+
+  // Borramos hintsEnabled y le agregamos los signos de interrogación (?) a gameState y room
+  const hints = gameState?.secret_hint
+    ? [gameState?.secret_hint, ""]
+    : getHintsForWord(gameState?.secret_word || '', room?.level || '');
 
   const beginSpeaking = async () => {
     try {
@@ -1211,7 +1218,7 @@ function PhaseReveal({ isTeacher, roomId, players }: { isTeacher: boolean, roomI
       <h2 className="text-3xl font-sora font-extrabold text-white uppercase tracking-wider shadow-md">TOP SECRET DATA</h2>
 
       <div
-        className={`bg-black/60 backdrop-blur-xl p-8 md:p-16 transition-all duration-700 relative cursor-pointer group select-none overflow-x-hidden rounded-[40px] border shadow-[0_30px_50px_rgba(0,0,0,0.5)] flex items-center justify-center min-h-[200px] md:min-h-[250px] w-full z-50 animate-pulse-slow ${revealed ? 'border-whapigen-cyan shadow-neon-pulse-cyan' : 'border-white/25 hover:border-purple-500/30 shadow-neon-pulse-violet'}`}
+        className={`bg-black/60 backdrop-blur-xl p-6 md:p-16 transition-all duration-700 relative cursor-pointer group select-none overflow-x-hidden rounded-[40px] border shadow-[0_30px_50px_rgba(0,0,0,0.5)] flex items-center justify-center min-h-[200px] md:min-h-[250px] w-full z-50 animate-pulse-slow ${revealed ? 'border-whapigen-cyan shadow-neon-pulse-cyan' : 'border-white/25 hover:border-purple-500/30 shadow-neon-pulse-violet'}`}
         onClick={() => setRevealed(prev => !prev)}
       >
         <div className="absolute inset-0 bg-digital-grid bg-[length:60px_60px] opacity-[0.03] pointer-events-none"></div>
@@ -1221,14 +1228,14 @@ function PhaseReveal({ isTeacher, roomId, players }: { isTeacher: boolean, roomI
             <p className="font-jetbrains text-sm tracking-[0.5em] text-white/70 uppercase">Tap to decrypt</p>
           </div>
         ) : (
-          <div className="flex flex-col items-center gap-2 animate-in slide-in-from-bottom duration-500 w-full px-4 md:px-12">
+          <div className="flex flex-col items-center gap-1 animate-in slide-in-from-bottom duration-500 w-full px-4 md:px-12">
             <div className="flex items-center gap-4 text-green-400 font-jetbrains text-sm tracking-[0.3em] uppercase">
               <Shield className="w-8 h-8" />
               <span>Sector Secured</span>
             </div>
 
             <div className="flex flex-col items-center gap-2 w-full min-w-0">
-              <span className="text-cyan-500 font-jetbrains text-xs md:text-sm tracking-[0.8em] font-black uppercase mb-4 ml-[0.8em]">IDENTITY</span>
+              <span className="text-cyan-500 font-jetbrains text-xs md:text-sm tracking-[0.8em] font-black uppercase mt-4 mb-4 ml-[0.8em]">IDENTITY</span>
               <div className="flex items-center justify-center w-full min-w-0">
                 <h1 className="text-white font-sora font-black uppercase tracking-tighter leading-none text-center drop-shadow-neon-cyan whitespace-nowrap flex-nowrap text-[clamp(1.2rem,8vw,2.5rem)] md:text-[clamp(1.5rem,5vw,2.5rem)]">
                   {role === 'IMPOSTOR' ? 'IMPOSTOR' : 'PLAYER'}
@@ -1435,7 +1442,7 @@ function PhaseSpeaking({ isTeacher, room, gameState, players }: { isTeacher: boo
     const nextPlayer = nextCandidates[0];
 
     if (nextPlayer) {
-      console.warn('📝 DB WRITE - Cambiando game_state:', { nuevaFase: 'Mismo (Siguiente Turno)', disparadoPor: 'handleNextTurn' });
+      // console.warn('📝 DB WRITE - Cambiando game_state:', { nuevaFase: 'Mismo (Siguiente Turno)', disparadoPor: 'handleNextTurn' });
       await supabase.from('game_state').update({
         current_turn_index: nextPlayer.turn_order,
         current_turn_player_id: nextPlayer.id,
@@ -1444,7 +1451,7 @@ function PhaseSpeaking({ isTeacher, room, gameState, players }: { isTeacher: boo
       }).eq('room_id', room.id);
     } else {
       await supabase.from('votes').delete().eq('room_id', room.id);
-      console.warn('📝 DB WRITE - Cambiando game_state:', { nuevaFase: 'VOTING', disparadoPor: 'handleNextTurn (Ronda Terminada)' });
+      // console.warn('📝 DB WRITE - Cambiando game_state:', { nuevaFase: 'VOTING', disparadoPor: 'handleNextTurn (Ronda Terminada)' });
       await supabase.from('game_state').update({
         phase: 'VOTING',
         is_paused: false,
@@ -1507,7 +1514,7 @@ function PhaseSpeaking({ isTeacher, room, gameState, players }: { isTeacher: boo
         // ── Normal render when active player exists ──
         return (
           <div className="text-center space-y-2 px-4">
-            <h3 className="text-whapigen-cyan font-jetbrains tracking-[0.2em] pt-0 md:pt-4 text-xs md:text-sm uppercase">
+            <h3 className="text-whapigen-cyan font-jetbrains tracking-[0.2em] pt-2 md:pt-4 text-xs md:text-sm uppercase">
               {currentPlayer && studentData?.playerId && currentPlayer.id === studentData.playerId ? (
                 <span key="your-turn" className="animate-pulse shadow-neon-pulse-cyan px-4 py-1 rounded-full border border-whapigen-cyan/30">YOUR TURN TO OPERATE</span>
               ) : (
@@ -2108,7 +2115,7 @@ function PhaseResults({ isTeacher, roomId, players }: { isTeacher: boolean, room
       {isTeacher && (
         <button
           onClick={async () => {
-            console.warn('📝 DB WRITE - Cambiando game_state:', { nuevaFase: 'LOBBY', disparadoPor: 'Reset Protocol' });
+            // console.warn('📝 DB WRITE - Cambiando game_state:', { nuevaFase: 'LOBBY', disparadoPor: 'Reset Protocol' });
             await supabase.from('players').update({ is_eliminated: false, turn_order: null, is_spectator: false }).eq('room_id', roomId);
             await supabase.from('game_state').update({ phase: 'LOBBY', current_turn_index: 0, last_eliminated_info: null }).eq('room_id', roomId);
           }}
@@ -2141,7 +2148,7 @@ function PhaseStandby({ isTeacher, roomId, players, gameState }: { isTeacher: bo
 
     const firstPlayer = alivePlayers[0];
 
-    console.warn('📝 DB WRITE - Cambiando game_state a SPEAKING_TURNS');
+    // console.warn('📝 DB WRITE - Cambiando game_state a SPEAKING_TURNS');
     await supabase.from('game_state').update({
       phase: 'SPEAKING_TURNS',
       current_round: gameState.current_round + 1,

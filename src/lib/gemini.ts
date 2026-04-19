@@ -45,28 +45,27 @@ DEBES devolver EXACTAMENTE este JSON: { "word": "ERROR_NO_MATCH", "hint": "NONE"
     }
 
     // 2. CONSTRUCCIÓN DEL PROMPT EN ESPAÑOL
-    const forbiddenLogic = usedWords.length > 0
-      ? `PROHIBIDO: No elijas ninguna de estas palabras (ya se usaron): [${usedWords.join(', ')}].`
-      : "";
-
     const prompt = `Eres la inteligencia artificial de un juego educativo llamado 'The Impostor'.
 Tu objetivo es elegir una PALABRA SECRETA y generar una PISTA (hint) para esa palabra.
 Los resultados (palabra y pista) DEBEN estar en INGLÉS y ya que es para un instituto no pueden ser palabras ofensivas o subidas de tono.
 
 CONTEXTO:
-- Nivel de Inglés de los alumnos: CEFR ${level}.
-- Tema solicitado: ${theme || "Tema general libre"}.
+- Nivel de Inglés: CEFR ${level}.
+- Tema solicitado: "${theme || "Tema general libre"}".
 ${contextInstructions}
-${forbiddenLogic}
-REGLAS ESTRICTAS PARA LA PISTA (HINT):
-1. La pista DEBE ser EXACTAMENTE UNA PALABRA en inglés (un sustantivo o un adjetivo).
-2. CRÍTICO: PROHIBIDO usar onomatopeyas (ej: no uses 'meow', 'woof', 'moo', 'beep', 'roar').
-3. CRÍTICO: La pista debe ser una asociación conceptual, NO un sinónimo directo, NO la palabra misma, y NO el sonido que hace un animal o un objeto.
-4. La palabra secreta elegida DEBE existir en el idioma inglés y estar escrita correctamente (salvo que devuelvas ERROR_NO_MATCH).
+
+REGLAS ESTRICTAS E INQUEBRANTABLES:
+1. EXCLUSIÓN ABSOLUTA: Tienes ESTRICTAMENTE PROHIBIDO devolver cualquiera de estas palabras: [${usedWords.join(', ')}]. Si ignoras esta regla, romperás el juego. ¡NO REPITAS PALABRAS!
+2. COHERENCIA TEMÁTICA: La palabra DEBE ser un ejemplo PERFECTO, COTIDIANO y DIRECTO del tema "${theme}". (Ejemplo: si el tema es "Pets", elige "Dog", "Cat" o "Hamster", NUNCA "Penguin", "Lion" o conceptos abstractos).
+3. REGLAS PARA LA PISTA (HINT):
+   - DEBE ser EXACTAMENTE UNA PALABRA (sustantivo o adjetivo).
+   - PROHIBIDO usar onomatopeyas (ej: no 'meow', 'woof').
+   - DEBE ser una asociación conceptual indirecta, NO un sinónimo, NO la palabra misma, ni el sonido del objeto/animal.
+4. VALIDACIÓN FINAL: Si sientes la tentación de elegir una palabra que encaja "más o menos", O si la única palabra disponible ya está en la lista de exclusión, DEBES abortar y devolver EXACTAMENTE: { "word": "ERROR_NO_MATCH", "hint": "NONE" }.
 
 FORMATO DE SALIDA:
 Devuelve ÚNICAMENTE un objeto JSON válido con esta estructura exacta, sin texto adicional ni formato markdown:
-{ "word": "LA_PALABRA_SECRETA_AQUI", "hint": "LA_PISTA_AQUI" }`;
+{ "word": "LA_PALABRA", "hint": "LA_PISTA" }`;
 
     const result = await model.generateContent(prompt);
     const responseText = result.response.text();

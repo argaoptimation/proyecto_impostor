@@ -126,7 +126,8 @@ export default function AdminDashboard() {
         current_turn_index: 0,
         is_paused: false,
         theme: customTheme.trim() || null,
-        use_book_bank: useBookBank, // <--- AGREGADO AQUÍ
+        use_book_bank: useBookBank,
+        hints_enabled: hintsEnabled,
         secret_word: null,
         secret_hint: null
       }], { onConflict: 'room_id' });
