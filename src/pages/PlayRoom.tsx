@@ -462,10 +462,10 @@ export default function PlayRoom() {
 
       {/* STUDENT IDENTITY LABEL */}
       {!isTeacher && studentData?.nickname && (
-        <div className="relative md:fixed md:bottom-8 md:left-8 z-50 pointer-events-none mt-4 mb-2 md:mb-0 md:mt-0 px-8 md:px-0">
+        <div className="fixed bottom-12 left-1/2 -translate-x-1/2 md:translate-x-0 md:left-8 z-50 pointer-events-none w-[90%] md:w-auto flex justify-center md:justify-start">
           <div className="bg-gradient-to-r from-whapigen-cyan/20 to-purple-600/20 backdrop-blur-2xl border border-white/10 px-6 py-3 rounded-full shadow-2xl flex items-center gap-3">
             <div className="w-2 h-2 rounded-full bg-whapigen-cyan animate-pulse shadow-[0_0_10px_#00f0ff]"></div>
-            <span className="font-jetbrains text-xs tracking-[0.4em] text-white/70 font-black uppercase">
+            <span className="font-jetbrains text-[10px] md:text-xs tracking-[0.4em] text-white/70 font-black uppercase whitespace-nowrap">
               IDENT: {studentData.nickname}
             </span>
           </div>
@@ -915,7 +915,7 @@ function PhaseLobby({ isTeacher, roomId, players, roomLevel }: { isTeacher: bool
   const [showBriefing, setShowBriefing] = useState(false);
 
   return (
-    <div className={`relative z-40 md:z-auto w-full max-w-2xl text-center space-y-4 animate-in fade-in duration-500 ${isTeacher ? 'pt-4 md:pt-0' : 'pt-32 md:pt-0'}`}>
+    <div className={`relative z-40 md:z-auto w-full max-w-2xl text-center space-y-4 animate-in fade-in duration-500 ${isTeacher ? 'pt-4 md:pt-0' : 'pt-48 md:pt-0'}`}>
 
       <div className="mb-8 relative">
         <Target className="w-24 h-24 mx-auto text-whapigen-cyan/20 absolute -top-4 left-1/2 -translate-x-1/2 -rotate-45" />
@@ -929,13 +929,13 @@ function PhaseLobby({ isTeacher, roomId, players, roomLevel }: { isTeacher: bool
 
         <button
           onClick={() => setShowBriefing(true)}
-          className="flex items-center justify-center gap-x-2 px-4 py-3 bg-white/5 backdrop-blur-md border border-whapigen-cyan/30 rounded-full text-whapigen-cyan font-jetbrains text-[9px] md:text-xs tracking-[0.3em] uppercase hover:bg-whapigen-cyan/10 hover:border-whapigen-cyan/60 transition-all cursor-pointer w-[90%] max-w-sm md:w-auto mx-auto mt-8 shadow-[0_0_15px_rgba(0,240,255,0.1)] whitespace-normal text-center"
+          className="flex items-center justify-center gap-x-2 px-4 py-3 bg-white/5 backdrop-blur-md border border-whapigen-cyan/30 rounded-full text-whapigen-cyan font-jetbrains text-[9px] md:text-xs tracking-[0.1em] md:tracking-[0.3em] uppercase hover:bg-whapigen-cyan/10 hover:border-whapigen-cyan/60 transition-all cursor-pointer w-[90%] max-w-sm md:w-auto mx-auto mt-8 shadow-[0_0_15px_rgba(0,240,255,0.1)] whitespace-normal text-center"
         >
           <Target className="w-4 h-4" /> MISSION BRIEFING / HOW TO PLAY
         </button>
       </div>
 
-      <div className="relative z-[1] pointer-events-auto bg-black/95 backdrop-blur-xl border border-white/10 p-6 min-h-[80px] w-full max-w-4xl flex flex-wrap gap-4 items-center justify-center rounded-[40px] shadow-[0_30px_100px_rgba(0,0,0,0.8)] overflow-x-hidden">
+      <div className="relative z-[1] pointer-events-auto bg-black/95 backdrop-blur-xl border border-white/10 p-2 min-h-[20px] md:min-h-[80px] w-full max-w-4xl flex flex-wrap gap-2 md:gap-4 items-center justify-center rounded-[40px] shadow-[0_30px_100px_rgba(0,0,0,0.8)] overflow-x-hidden">
         <div className="particles-bg opacity-30">
           {[...Array(15)].map((_, i) => (
             <div
@@ -1035,7 +1035,7 @@ function PhaseLobby({ isTeacher, roomId, players, roomLevel }: { isTeacher: bool
           </button>
         </div>
       ) : (
-        <div className="flex flex-col items-center gap-6 mt-12 w-full max-w-xl mx-auto">
+        <div className="flex flex-col items-center gap-6 mt-12 pb-24 md:pb-12 w-full max-w-xl mx-auto">
           {!canStart ? (
             <div className="w-full bg-whapigen-red/5 border border-whapigen-red/20 rounded-[30px] p-8 text-center animate-pulse shadow-neon-pulse-red backdrop-blur-xl">
               <div className="flex items-center justify-center gap-3 mb-3">
@@ -1045,7 +1045,7 @@ function PhaseLobby({ isTeacher, roomId, players, roomLevel }: { isTeacher: bool
               <p className="text-white/70 font-jetbrains text-xs tracking-[0.3em] font-black italic">AWAITING ADDITIONAL PLAYERS ({players.length}/16)</p>
             </div>
           ) : (
-            <div className="text-whapigen-cyan font-jetbrains text-xs tracking-[0.4em] uppercase animate-pulse text-center font-black drop-shadow-neon-cyan">
+            <div className="text-whapigen-cyan font-jetbrains text-[10px] md:text-xs tracking-[0.4em] uppercase animate-pulse text-center font-black drop-shadow-neon-cyan">
               ENCRYPTION ACTIVE: AWAITING COORDINATOR ORDERS
             </div>
           )}
@@ -1055,21 +1055,21 @@ function PhaseLobby({ isTeacher, roomId, players, roomLevel }: { isTeacher: bool
       {/* Mission Briefing Modal */}
       {showBriefing && createPortal((
         <div className="fixed inset-0 z-[99999] bg-black md:bg-black/80 md:backdrop-blur-md flex flex-col overflow-y-auto w-full h-full p-4 md:p-8 animate-in fade-in zoom-in-95 duration-500">
-          <div className="relative w-full max-w-2xl md:my-auto flex flex-col p-8 bg-[#050505]/95 backdrop-blur-2xl border border-whapigen-cyan/20 rounded-[40px] shadow-[0_20px_80px_rgba(0,240,255,0.2)] group/card mx-auto">
+          <div className="relative w-full max-w-2xl md:my-auto flex flex-col p-4 md:p-8 bg-[#050505]/95 backdrop-blur-2xl border border-whapigen-cyan/20 rounded-[40px] shadow-[0_20px_80px_rgba(0,240,255,0.2)] group/card mx-auto">
             <button
               onClick={() => setShowBriefing(false)}
               className="absolute top-4 right-4 z-[100000] text-whapigen-cyan hover:text-white"
             >
-              <div className="w-12 h-12 md:w-10 md:h-10 rounded-full bg-whapigen-cyan/10 flex items-center justify-center border border-whapigen-cyan/20 hover:bg-whapigen-cyan/30 transition-all">
+              <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-whapigen-cyan/10 flex items-center justify-center border border-whapigen-cyan/20 hover:bg-whapigen-cyan/30 transition-all">
                 <X className="w-6 h-6 md:w-5 md:h-5" />
               </div>
             </button>
-            <h3 className="text-xl md:text-2xl pr-12 md:pr-0font-sora font-black text-transparent bg-clip-text bg-gradient-to-r from-whapigen-cyan to-purple-400 uppercase mb-8 drop-shadow-neon-cyan tracking-tighter text-center md:text-left">
+            <h3 className="text-xl md:text-2xl pr-12 md:pr-0 font-sora font-black text-transparent bg-clip-text bg-gradient-to-r from-whapigen-cyan to-purple-400 uppercase mb-4 drop-shadow-neon-cyan tracking-tighter text-center md:text-left">
               MISSION BRIEFING
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-6">
 
-              <div className="bg-whapigen-cyan/5 border border-whapigen-cyan/10 p-8 rounded-[30px] hover:border-whapigen-cyan/40 transition-all group/info flex flex-col items-start gap-4 h-full">
+              <div className="bg-whapigen-cyan/5 border border-whapigen-cyan/10 p-4 md:p-8 rounded-[30px] hover:border-whapigen-cyan/40 transition-all group/info flex flex-col items-start gap-4 h-full">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-whapigen-cyan/10 flex items-center justify-center border border-whapigen-cyan/20 group-hover/info:bg-whapigen-cyan/20 transition-all">
                     <Eye className="w-5 h-5 text-whapigen-cyan" />
@@ -1079,7 +1079,7 @@ function PhaseLobby({ isTeacher, roomId, players, roomLevel }: { isTeacher: bool
                 <p className="text-whapigen-cyan/60 font-jetbrains text-[11px] leading-relaxed tracking-wider font-medium">Check your role. Players receive the secret word; the Impostor does not know it and is left in the dark.</p>
               </div>
 
-              <div className="bg-whapigen-cyan/5 border border-whapigen-cyan/10 p-8 rounded-[30px] hover:border-purple-500/40 transition-all group/info flex flex-col items-start gap-4 h-full">
+              <div className="bg-whapigen-cyan/5 border border-whapigen-cyan/10 p-4 md:p-8 rounded-[30px] hover:border-purple-500/40 transition-all group/info flex flex-col items-start gap-4 h-full">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center border border-purple-500/20 group-hover/info:bg-purple-500/20 transition-all">
                     <Target className="w-5 h-5 text-purple-400" />
@@ -1089,7 +1089,7 @@ function PhaseLobby({ isTeacher, roomId, players, roomLevel }: { isTeacher: bool
                 <p className="text-whapigen-cyan/60 font-jetbrains text-[11px] leading-relaxed tracking-wider font-medium">The Impostor gets a hint to help them blend in. <span className="text-whapigen-cyan">CAUTION FOR PLAYERS:</span> if your clues are too obvious, the Impostor may guess the secret word.</p>
               </div>
 
-              <div className="bg-whapigen-cyan/5 border border-whapigen-cyan/10 p-8 rounded-[30px] hover:border-cyan-500/40 transition-all group/info flex flex-col items-start gap-4 h-full">
+              <div className="bg-whapigen-cyan/5 border border-whapigen-cyan/10 p-4 md:p-8 rounded-[30px] hover:border-cyan-500/40 transition-all group/info flex flex-col items-start gap-4 h-full">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-cyan-500/10 flex items-center justify-center border border-cyan-500/20 group-hover/info:bg-cyan-500/20 transition-all">
                     <MessageSquare className="w-5 h-5 text-whapigen-cyan" />
@@ -1099,7 +1099,7 @@ function PhaseLobby({ isTeacher, roomId, players, roomLevel }: { isTeacher: bool
                 <p className="text-whapigen-cyan/60 font-jetbrains text-[11px] leading-relaxed tracking-wider font-medium">Discuss and vote for the player you think is the Impostor. The Player with the most votes is eliminated.</p>
               </div>
 
-              <div className="bg-whapigen-cyan/5 border border-whapigen-cyan/10 p-8 rounded-[30px] hover:border-whapigen-green/40 transition-all group/info flex flex-col items-start gap-4 h-full">
+              <div className="bg-whapigen-cyan/5 border border-whapigen-cyan/10 p-4 md:p-8 rounded-[30px] hover:border-whapigen-green/40 transition-all group/info flex flex-col items-start gap-4 h-full">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-whapigen-green/10 flex items-center justify-center border border-whapigen-green/20 group-hover/info:bg-whapigen-green/20 transition-all">
                     <ShieldCheck className="w-5 h-5 text-whapigen-green" />
@@ -1112,7 +1112,7 @@ function PhaseLobby({ isTeacher, roomId, players, roomLevel }: { isTeacher: bool
 
             <button
               onClick={() => setShowBriefing(false)}
-              className="w-full mt-10 h-20 bg-gradient-to-r from-purple-600 to-whapigen-cyan hover:from-white hover:to-white text-black font-sora tracking-[0.5em] font-black rounded-full transition-all shadow-[0_15px_40px_rgba(0,240,255,0.2)] uppercase text-xs hover:-translate-y-1 active:translate-y-0"
+              className="w-full mt-4 md:mt-10 h-12 md:h-20 bg-gradient-to-r from-purple-600 to-whapigen-cyan hover:from-white hover:to-white text-black font-sora tracking-[0.5em] font-black rounded-full transition-all shadow-[0_15px_40px_rgba(0,240,255,0.2)] uppercase text-xs hover:-translate-y-1 active:translate-y-0"
             >
               CONFIRM BRIEFING
             </button>
