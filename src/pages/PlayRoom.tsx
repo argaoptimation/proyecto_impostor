@@ -337,7 +337,10 @@ export default function PlayRoom() {
         isAbortingRef.current = true;
         if (isTeacher) {
           console.warn('📝 DB WRITE - RESULTS (Victoria detectada globalmente)');
-          supabase.from('game_state').update({ phase: 'RESULTS' }).eq('room_id', room.id).then();
+          supabase.from('game_state').update({
+            phase: 'RESULTS',
+            last_eliminated_info: { reason: 'ABORT' } // <-- LE PASAMOS LA SEÑAL DE ALERTA
+          }).eq('room_id', room.id).then();
         }
       }
     }
@@ -1286,7 +1289,7 @@ function PhaseSpeaking({ isTeacher, room, gameState, players }: { isTeacher: boo
         if (cancelled) return;
         if (!data) {
           // Confirmed gone from DB — safe to advance the turn.
-          console.warn('🚨 DISCONNECT DETECTOR: jugador confirmado ausente en DB. Saltando turno...');
+          // console.warn('🚨 DISCONNECT DETECTOR: jugador confirmado ausente en DB. Saltando turno...');
           handleNextTurn();
         }
       });
@@ -1890,6 +1893,17 @@ function PhaseVoting({ isTeacher, roomId, players, gameState, room }: { isTeache
 }
 
 function EliminationAnnouncement({ info }: { info: any }) {
+  // 1. CASO NUEVO: Abandono de sala
+  if (info?.reason === 'ABORT') {
+    return (
+      <div className="flex flex-col items-center justify-center py-2 md:py-6 px-6 md:px-12 bg-white/5 border border-whapigen-red/50 rounded-[30px] mb-4 shadow-[0_0_15px_rgba(255,0,0,0.2)]">
+        <span className="font-jetbrains text-sm tracking-[0.4em] text-whapigen-red/80 uppercase">SYSTEM ALERT</span>
+        <h3 className="font-sora font-black text-xl text-whapigen-red tracking-widest uppercase mt-2">A PLAYER LEFT THE MISSION</h3>
+      </div>
+    );
+  }
+
+  // 2. CASO EMPATE (null o vacío)
   if (!info) {
     return (
       <div className="flex flex-col items-center justify-center py-2 md:py-6 px-6 md:px-12 bg-white/5 border border-white/10 rounded-[30px] mb-4">
@@ -1899,6 +1913,7 @@ function EliminationAnnouncement({ info }: { info: any }) {
     );
   }
 
+  // 3. CASO ELIMINACIÓN NORMAL
   return (
     <div className={`flex flex-col items-center justify-center py-2 md:py-6 px-6 md:px-12 border rounded-[30px] mb-8 animate-in zoom-in-50 duration-500 shadow-2xl ${info.wasImpostor ? 'bg-whapigen-green/10 border-whapigen-green/30 shadow-whapigen-green/20' : 'bg-whapigen-red/10 border-whapigen-red/30 shadow-whapigen-red/20'}`}>
       <span className="font-jetbrains text-sm tracking-[0.4em] text-white/50 uppercase">VOTING RESULT</span>
@@ -2027,7 +2042,8 @@ function PhaseStandby({ isTeacher, roomId, players, gameState }: { isTeacher: bo
       current_round: gameState.current_round + 1,
       current_turn_index: firstPlayer.turn_order || 0,
       current_turn_player_id: firstPlayer.id,
-      turn_started_at: new Date().toISOString()
+      turn_started_at: new Date().toISOString(),
+      last_eliminated_info: null
     }).eq('room_id', roomId);
   };
 
