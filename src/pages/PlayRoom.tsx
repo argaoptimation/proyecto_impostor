@@ -179,8 +179,8 @@ export default function PlayRoom() {
     if (!isTeacher || !roomId || !gameState?.phase) return;
 
     const reaperInterval = setInterval(async () => {
-      // Tolerancia: 3 minutos (180,000 ms) en el LOBBY, 30 segundos (30,000 ms) en MISIÓN
-      const gracePeriod = gameState.phase === 'LOBBY' ? 120000 : 30000;
+      // Tolerancia: 2 minutos (180,000 ms) en el LOBBY, 45 segundos (45,000 ms) en MISIÓN
+      const gracePeriod = gameState.phase === 'LOBBY' ? 180000 : 45000;
       const cutoffTime = new Date(Date.now() - gracePeriod).toISOString();
 
       // Buscamos jugadores que se hayan quedado sin latido más allá del límite
