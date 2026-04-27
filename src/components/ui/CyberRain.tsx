@@ -39,7 +39,6 @@ export function CyberRain() {
   if (!isEnabled) return null;
 
   return (
-    // 1. Cambiamos 'inset-0' por coordenadas explícitas que sobran por arriba y abajo (-top-20 y -bottom-20)
     <div className="cyber-rain fixed -top-20 -bottom-20 left-0 right-0 z-0 pointer-events-none overflow-hidden">
       {particles.map(p => (
         <div

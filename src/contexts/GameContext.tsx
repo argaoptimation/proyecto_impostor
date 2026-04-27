@@ -165,10 +165,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
       if (!roomRes.data) {
         if (userIdRef.current) {
-          console.warn('🚨 SALA INEXISTENTE - Retornando Admin al Dashboard');
+          // console.warn('🚨 SALA INEXISTENTE - Retornando Admin al Dashboard');
           window.location.href = '/admin/dashboard';
         } else {
-          console.warn('🚨 SALA INEXISTENTE - Expulsando a /join');
+          // console.warn('🚨 SALA INEXISTENTE - Expulsando a /join');
           sessionStorage.clear();
           window.location.href = '/join';
         }
@@ -281,10 +281,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
             // Room is truly gone. Redirect based on identity.
             if (userIdRef.current) {
-              console.warn('🚨 SALA ELIMINADA (confirmada) - Retornando Admin al Dashboard');
+              // console.warn('🚨 SALA ELIMINADA (confirmada) - Retornando Admin al Dashboard');
               window.location.href = '/admin/dashboard';
             } else {
-              console.warn('🚨 SALA ELIMINADA POR ADMIN (confirmada) - Expulsando a /join');
+              // console.warn('🚨 SALA ELIMINADA POR ADMIN (confirmada) - Expulsando a /join');
               sessionStorage.clear();
               window.location.href = '/join';
             }
