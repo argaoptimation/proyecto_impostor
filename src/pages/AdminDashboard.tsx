@@ -53,7 +53,7 @@ export default function AdminDashboard() {
   const [turnDuration, setTurnDuration] = useState(30);
   const [votingDuration, setVotingDuration] = useState(120);
   const [level, setLevel] = useState('A1');
-  const [hintsEnabled, setHintsEnabled] = useState(false);
+  const [hintsEnabled, setHintsEnabled] = useState(true);
   const [customTheme, setCustomTheme] = useState('');
   const [useBookBank, setUseBookBank] = useState(false);
 
@@ -234,17 +234,26 @@ export default function AdminDashboard() {
             />
 
             <GameSelect
-              label="English Level"
+              label={useBookBank ? "CIL Lenguas Books" : "English Level"}
               value={level}
               onChange={setLevel}
-              options={[
-                { label: 'A1 - Beginner', value: 'A1' },
-                { label: 'A2 - Elementary', value: 'A2' },
-                { label: 'B1 - Intermediate', value: 'B1' },
-                { label: 'B2 - Upper Int', value: 'B2' },
-                { label: 'C1 - Advanced', value: 'C1' },
-                { label: 'C2 - Proficiency', value: 'C2' },
-              ]}
+              options={
+                useBookBank
+                  ? [
+                    { label: 'A2+ | WIDER WORLD 3', value: 'A2_PLUS' },
+                    { label: 'B1 | WIDER WORLD 4', value: 'B1_WIDER' },
+                    { label: 'B1 (adultos) | SPEAK OUT 2', value: 'B1_ADULTS' },
+                    { label: 'B2-C1 | SPEAK OUT  ADVANCE', value: 'B2_C1' },
+                  ]
+                  : [
+                    { label: 'A1 - Beginner', value: 'A1' },
+                    { label: 'A2 - Elementary', value: 'A2' },
+                    { label: 'B1 - Intermediate', value: 'B1' },
+                    { label: 'B2 - Upper Int', value: 'B2' },
+                    { label: 'C1 - Advanced', value: 'C1' },
+                    { label: 'C2 - Proficiency', value: 'C2' },
+                  ]
+              }
             />
 
             {/* AI MODE TOGGLE */}
@@ -253,7 +262,12 @@ export default function AdminDashboard() {
                 Intelligence Source
               </label>
               <div
-                onClick={() => setUseBookBank(!useBookBank)}
+                onClick={() => {
+                  const nextState = !useBookBank;
+                  setUseBookBank(nextState);
+                  // Esta línea evita que quede un nivel "fantasma" seleccionado al cambiar de modo
+                  setLevel(nextState ? 'A2_PLUS' : 'A1');
+                }}
                 className={`group relative flex items-center justify-between p-4 rounded-[30px] border transition-all cursor-pointer backdrop-blur-xl ${useBookBank
                   ? 'bg-whapigen-cyan/10 border-whapigen-cyan/40 shadow-neon-cyan/10'
                   : 'bg-black/40 border-white/5 hover:border-white/10'

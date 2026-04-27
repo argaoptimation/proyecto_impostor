@@ -29,10 +29,14 @@ export async function generateGameWord(
 
       if (levelWords.length > 0) {
         const wordList = levelWords.join(', ');
+        const themeGuidance = !theme || theme === "Tema general libre"
+          ? `No hay un tema específico. Elige CUALQUIER palabra de la lista que sea interesante y variada para los alumnos.`
+          : `ELEGIR LA PALABRA que mejor se adapte de forma DIRECTA, CLARA y OBVIA al tema solicitado ("${theme}").`;
         contextInstructions = `
-MODO ESTRICTO: AI BOOK (Sincronización semántica con el plan de estudios).
-Aquí tienes la lista completa de palabras autorizadas para el nivel ${level}: [${wordList}].
-Tu tarea es analizar esta lista y ELEGIR LA PALABRA que mejor se adapte de forma DIRECTO, CLARO y OBVIO al tema solicitado ("${theme}").
+
+MODO ESTRICTO: AI BOOK.
+Lista de palabras autorizadas para ${level}: [${wordList}].
+Tu tarea: ${themeGuidance}
 FILTRO DE PRECISIÓN: La relación debe ser prototípica. No elijas conceptos abstractos o campos de estudio si el tema pide ejemplos concretos (ejemplo: si el tema es "Professions", no elijas "Sustainability" o "Psychology" a menos que sean la profesión exacta "Psychologist"). 
 CRÍTICO: Si las únicas palabras disponibles en la lista tienen una relación débil, forzada o indirecta con el tema "${theme}", DEBES abortar y devolver EXACTAMENTE: { "word": "ERROR_NO_MATCH", "hint": "NONE" }.
 OBLIGATORIO: BAJO NINGUNA CIRCUNSTANCIA inventes una palabra. Solo puedes devolver una palabra exacta de la lista o el error.
@@ -50,7 +54,7 @@ Tu objetivo es elegir una PALABRA SECRETA y generar una PISTA (hint) para esa pa
 Los resultados (palabra y pista) DEBEN estar en INGLÉS y ya que es para un instituto no pueden ser palabras ofensivas o subidas de tono.
 
 CONTEXTO:
-- Nivel de Inglés: CEFR ${level}.
+- Nivel de Inglés: CEFR ${level}. LA PALABRA DEBE COINCIDIR ESTRICTAMENTE CON ESTE NIVEL DE DIFICULTAD. No elijas palabras básicas (A1/A2) si el nivel es avanzado (B2/C1/C2).
 - Tema solicitado: "${theme || "Tema general libre"}".
 ${contextInstructions}
 
@@ -60,7 +64,9 @@ REGLAS ESTRICTAS E INQUEBRANTABLES:
 3. REGLAS PARA LA PISTA (HINT):
    - DEBE ser EXACTAMENTE UNA PALABRA (sustantivo o adjetivo).
    - PROHIBIDO usar onomatopeyas (ej: no 'meow', 'woof').
-   - DEBE ser una asociación conceptual indirecta, NO un sinónimo, NO la palabra misma, ni el sonido del objeto/animal.
+   - DEBE ser una asociación conceptual indirecta.
+   - ¡PROHIBICIÓN ABSOLUTA!: La pista NUNCA puede ser la misma palabra secreta, ni contener la palabra secreta.
+   - NO puede ser un sinónimo directo ni el sonido del objeto/animal.
 4. VALIDACIÓN FINAL: Si sientes la tentación de elegir una palabra que encaja "más o menos", O si la única palabra disponible ya está en la lista de exclusión, DEBES abortar y devolver EXACTAMENTE: { "word": "ERROR_NO_MATCH", "hint": "NONE" }.
 
 FORMATO DE SALIDA:
