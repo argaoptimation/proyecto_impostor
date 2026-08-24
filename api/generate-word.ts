@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
+// ── VOCABULARIO DE LIBROS CIL LENGUAS ──
 const bookVocabulary: Record<string, string[]> = {
   A2_PLUS: [
     "ARTIST", "PYRAMID", "GRAFFITI", "TOWN", "NURSE", "HOSPITAL", "CARPENTER", "BOAT", "CAT", "KAYAK", "SCHOOL", "SANDWICH", "SNAKE", "COUSIN", "COMPUTER", "SPECIALIST", "PRINTER", "SCULPTURE", "CHEF", "FARMER", "MECHANIC", "HAIRDRESSER", "SCIENTIST", "DENTIST", "CAP", "HOODIE", "SHIRT", "UNIFORM", "TIE", "EARRING", "PHONE", "BATTERY", "CABLE", "CHARGER", "EARPHONES", "PLUG", "SELFIE STICK", "SPEAKER", "TABLET", "CAMERA", "SHOES", "BAND", "PHOTOGRAPHER", "REPORTER", "SKATEBOARD", "HELMET", "BUS", "SKATEBOARDER", "PLASTIC", "HANDS", "CONTROLLER", "RUCKSACK", "BAG", "TABLE", "POSTER", "LIFE JACKET", "CERTIFICATE", "MUSEUM", "EXHIBITION", "ROBOT", "REINDEER", "FISH", "WOOD", "KNIFE", "SACK", "WHALE", "PENGUIN", "SHARK", "SEAL", "DOLPHIN", "MANATEE", "WAVES", "CLOUDS", "VEGETATION", "MANGROVE", "FOREST", "BREAD", "CHEESE", "CHEWING GUM", "CHILLI", "CREAM", "CRISPS", "CUCUMBER", "FLOUR", "FRUIT JUICE", "GARLIC", "GRAPES", "HONEY", "ICE CREAM", "LEMONADE", "LETTUCE", "NUTS", "PEACH", "PEAR", "PINEAPPLE", "SMOOTHIE", "TUNA", "YOGHURT", "PIZZA", "NOODLES", "CHEESEBURGER", "RICE", "BEANS", "CAKE", "POTATOES", "TOMATO", "MAYONNAISE", "SAUSAGES", "COMEDY", "DOCUMENTARY", "THRILLER", "ACTOR", "PRODUCER", "PERFORMER", "TARDIS", "AUDIENCE", "CHARACTER", "EPISODE", "SCREENS", "CIRCUS", "COSTUME", "LIGHTS", "MIME", "PUPPET", "STAGE", "CARAVAN", "CASTLE", "HUT", "SKYSCRAPER", "VILLA", "COTTAGE", "FLAT", "BADMINTON", "BASKETBALL", "DIVING", "GYMNASTICS", "HANDBALL", "ICE HOCKEY", "ICE-SKATING", "SURFING", "VOLLEYBALL", "YOGA", "CHANGING ROOMS", "FAN", "GOAL", "KIT", "MASCOT", "MATCH", "PITCH", "SCOREBOARD", "SEAT", "STADIUM", "TEAM", "TRAINERS", "TENNIS COURT", "TICKET", "TICKET OFFICE", "WHISTLE", "SLACKLINE", "BICYCLE", "AIRPORT", "STATION", "PLATFORM", "PASSPORT", "SLEEPING BAG", "SUN CREAM", "SUNGLASSES", "TENT", "TORCH", "SWIMSUIT", "HOTEL", "RECEPTION", "POOL", "GUEST", "FLOOR", "WIG", "MEDAL", "BARBECUE", "NEWSPAPER", "BOX", "BURGLAR", "PICKPOCKET", "ROBBER", "SHOPLIFTER", "THIEF", "VANDAL", "COURT", "LAWYER", "PRISON", "JAIL", "CLUE", "WITNESS", "FINGERPRINTS", "FOOTPRINTS", "HAND", "BERRY", "GARDEN", "LIBRARY", "CANTEEN", "DICTIONARY", "TEACHER", "HEAD TEACHER", "FORM TUTOR", "CLAY", "MOUSE", "CONCRETE", "WALL"
@@ -15,25 +16,114 @@ const bookVocabulary: Record<string, string[]> = {
   ]
 };
 
+// ── SEGURIDAD: RATE LIMITING EN MEMORIA ──
+// Máximo 10 peticiones por minuto por IP
+const rateLimitMap = new Map<string, number[]>();
+
+function checkRateLimit(ip: string, maxRequests = 10, windowMs = 60000): boolean {
+  const now = Date.now();
+  const timestamps = rateLimitMap.get(ip) || [];
+
+  const validTimestamps = timestamps.filter(t => now - t < windowMs);
+
+  if (validTimestamps.length >= maxRequests) {
+    rateLimitMap.set(ip, validTimestamps);
+    return false;
+  }
+
+  validTimestamps.push(now);
+  rateLimitMap.set(ip, validTimestamps);
+
+  // Limpieza periódica si acumula demasiadas IPs
+  if (rateLimitMap.size > 500) {
+    for (const [key, list] of rateLimitMap.entries()) {
+      const active = list.filter(t => now - t < windowMs);
+      if (active.length === 0) rateLimitMap.delete(key);
+      else rateLimitMap.set(key, active);
+    }
+  }
+
+  return true;
+}
+
+// ── SEGURIDAD: VALIDACIÓN DE ORIGEN / DOMINIO ──
+function isAllowedOrigin(originHeader: string | undefined, refererHeader: string | undefined): boolean {
+  const target = originHeader || refererHeader;
+  if (!target) return true; // Peticiones directas del mismo servidor
+
+  try {
+    const parsed = new URL(target);
+    const host = parsed.hostname.toLowerCase();
+
+    // Dominio oficial de producción
+    if (host === 'impostor-cil.vercel.app') return true;
+
+    // Subdominios de preview en Vercel vinculados al proyecto
+    if (host.endsWith('.vercel.app') && host.includes('impostor-cil')) return true;
+
+    // Entornos de desarrollo local
+    if (
+      host === 'localhost' ||
+      host === '127.0.0.1' ||
+      host.startsWith('192.168.') ||
+      host.startsWith('10.')
+    ) {
+      return true;
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 export default async function handler(req: any, res: any) {
-  // CORS handling
+  const origin = req.headers.origin || req.headers.referer || '';
+  const allowed = isAllowedOrigin(req.headers.origin, req.headers.referer);
+
+  // CORS dinámico seguro: solo responde al dominio autorizado
+  if (allowed && origin) {
+    try {
+      const parsed = new URL(origin);
+      res.setHeader('Access-Control-Allow-Origin', `${parsed.protocol}//${parsed.host}`);
+    } catch {
+      res.setHeader('Access-Control-Allow-Origin', 'https://impostor-cil.vercel.app');
+    }
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', 'https://impostor-cil.vercel.app');
+  }
+
   res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader(
-    'Access-Control-Allow-Headers',
-    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
-  );
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,POST');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Requested-With');
 
   if (req.method === 'OPTIONS') {
     res.status(200).end();
     return;
   }
 
+  // 1. BLOQUEO POR DOMINIO
+  if (!allowed) {
+    console.warn(`⛔ [Security] Blocked unauthorized domain request from: ${origin}`);
+    return res.status(403).json({ error: 'Access denied: unauthorized domain.' });
+  }
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  // 2. RATE LIMITING POR IP
+  const clientIp = (req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || req.socket?.remoteAddress || '127.0.0.1')
+    .toString()
+    .split(',')[0]
+    .trim();
+
+  if (!checkRateLimit(clientIp, 10, 60000)) {
+    console.warn(`⚠️ [Security] Rate limit exceeded for IP: ${clientIp}`);
+    return res.status(429).json({ error: 'Rate limit exceeded. Please wait 1 minute before starting another game.' });
+  }
+
+  // 3. GENERACIÓN CON GEMINI
   try {
     const rawBody = req.body;
     const body = typeof rawBody === 'string' ? JSON.parse(rawBody) : (rawBody || {});
